@@ -1,0 +1,16 @@
+[package]
+name = "dryrun-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Types partagés et moteur de règles du pare-feu à simulation (Dry Run)"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lib]
+name = "dryrun_core"
+path = "src/lib.rs"

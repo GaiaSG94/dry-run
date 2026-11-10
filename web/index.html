@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dry Run — Pare-feu à Simulation pour Wallets d'Agents NEAR</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-container">
+            <div class="logo-area">
+                <span class="badge-tag">HACKATHON NEAR — TICKET 06</span>
+                <h1>DRY RUN <span class="subtitle">| Garde-barrière IA</span></h1>
+                <p class="tagline">« Every transaction happens twice, the first time for nothing. »</p>
+            </div>
+            <div class="header-actions">
+                <button id="freeze-btn" class="btn btn-freeze" title="Déclenche immédiatement la clé de gel étanche du coffre">
+                    ❄️ GELER LE COFFRE (1 CLIC)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- État du Coffre -->
+        <section class="card vault-status-section">
+            <div class="section-title-row">
+                <h2>État du Coffre on-chain</h2>
+                <div id="vault-badge" class="status-badge badge-active">ACTIF</div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="stat-label">Compte Vault</span>
+                    <span id="stat-account" class="stat-value text-accent">-</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Solde Disponible</span>
+                    <span id="stat-balance" class="stat-value">0 NEAR</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Plafond par Tx</span>
+                    <span id="stat-tx-cap" class="stat-value">0 NEAR</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Plafond 24h Glissant</span>
+                    <span id="stat-daily-cap" class="stat-value">0 NEAR</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Dépensé (24h)</span>
+                    <span id="stat-spent" class="stat-value">0 NEAR</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Propriétaire</span>
+                    <span id="stat-owner" class="stat-value text-muted">-</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Grille principale : Formulaire & Carte des Effets -->
+        <div class="two-columns">
+            <!-- Formulaire de Demande -->
+            <section class="card form-section">
+                <h2>Proposer une Transaction</h2>
+                <p class="section-desc">L'intention déclarée borne le pare-feu. Tout effet non couvert entraîne un refus.</p>
+                
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="transfer">Transfert Direct</button>
+                    <button class="tab-btn" data-tab="call">Appel Smart Contract</button>
+                </div>
+
+                <!-- Form Transfert -->
+                <form id="form-transfer" class="action-form">
+                    <div class="form-group">
+                        <label for="tf-to">Destinataire (Compte NEAR)</label>
+                        <input type="text" id="tf-to" required placeholder="bob.test.near" value="bob.test.near">
+                    </div>
+                    <div class="form-group">
+                        <label for="tf-amount">Montant (NEAR)</label>
+                        <input type="number" id="tf-amount" step="0.001" min="0" required placeholder="1.0" value="1.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="tf-intent">Intention déclarée (Obligatoire)</label>
+                        <input type="text" id="tf-intent" required placeholder="Ex: payer 1 NEAR à bob" value="payer 1 NEAR à bob">
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="btn-submit-tf">Simuler & Valider</button>
+                    </div>
+                </form>
+
+                <!-- Form Appel Contrat -->
+                <form id="form-call" class="action-form hidden">
+                    <div class="form-group">
+                        <label for="call-contract">Contrat visé</label>
+                        <input type="text" id="call-contract" required placeholder="good-dex.test.near" value="good-dex.test.near">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="call-method">Méthode</label>
+                            <input type="text" id="call-method" required placeholder="swap" value="swap">
+                        </div>
+                        <div class="form-group half">
+                            <label for="call-deposit">Dépôt joint (NEAR)</label>
+                            <input type="number" id="call-deposit" step="0.001" min="0" required placeholder="2.0" value="2.0">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="call-args">Arguments JSON</label>
+                        <textarea id="call-args" rows="2" placeholder='{"token_out": "test-token.test.near", "min_out": 1900000}'>{"token_out": "test-token.test.near", "min_out": 1900000}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="call-intent">Intention déclarée (Obligatoire)</label>
+                        <input type="text" id="call-intent" required placeholder="Ex: swap 2 NEAR pour min 1.9 TEST" value="swap 2 NEAR pour min 1.9 TEST">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="call-beneficiary">Bénéficiaire autorisé (opt)</label>
+                            <input type="text" id="call-beneficiary" placeholder="vault.test.near" value="vault.test.near">
+                        </div>
+                        <div class="form-group half">
+                            <label for="call-min-in">Minimum attendu (ex: TEST:1.9)</label>
+                            <input type="text" id="call-min-in" placeholder="TEST:1.9">
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="btn-submit-call">Simuler & Valider</button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Carte des Effets (Rendu Live) -->
+            <section class="card effect-card-section">
+                <div class="section-title-row">
+                    <h2>Carte des Effets Similés</h2>
+                    <div id="verdict-tag" class="verdict-tag verdict-none">AUCUNE SIMULATION</div>
+                </div>
+                <div id="card-placeholder" class="card-placeholder">
+                    <p>Aucune transaction simulée pour le moment.</p>
+                    <small>Remplissez le formulaire à gauche et cliquez sur « Simuler & Valider » pour observer l'inspection complète des effets avant signature.</small>
+                </div>
+                <div id="card-content" class="card-display hidden">
+                    <div class="effect-header">
+                        <div class="effect-summary" id="card-summary">-</div>
+                        <div class="effect-status" id="card-exec-status">-</div>
+                    </div>
+
+                    <div class="effect-block">
+                        <div class="effect-block-title">Mouvements de Soldes</div>
+                        <div id="card-balances" class="effect-block-body"></div>
+                    </div>
+
+                    <div class="effect-block">
+                        <div class="effect-block-title">Clés d'accès & Approbations</div>
+                        <div id="card-keys" class="effect-block-body"></div>
+                    </div>
+
+                    <div class="effect-block">
+                        <div class="effect-block-title">Reçus Asynchrones & Exécution</div>
+                        <div id="card-receipts" class="effect-block-body"></div>
+                    </div>
+
+                    <div class="effect-block">
+                        <div class="effect-block-title">Règles Déclenchées (Pare-feu)</div>
+                        <div id="card-rules" class="effect-block-body"></div>
+                    </div>
+
+                    <div class="effect-raw-toggle">
+                        <button id="toggle-terminal-card" class="btn-link">Afficher le format console terminal</button>
+                        <pre id="card-terminal-raw" class="terminal-box hidden"></pre>
+                    </div>
+
+                    <button id="btn-confirm-warn" class="btn btn-warn hidden" type="button">
+                        ⚠️ Confirmer malgré l'avertissement et signer
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- Frise Chronologique des Décisions -->
+        <section class="card timeline-section">
+            <div class="section-title-row">
+                <h2>Frise Chronologique des Décisions (/api/log)</h2>
+                <button id="btn-refresh-log" class="btn btn-secondary">Rafraîchir</button>
+            </div>
+            <div class="timeline-container" id="timeline-list">
+                <div class="timeline-empty">Journal vide. Les transactions simulées apparaîtront ici.</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>Projet Hackathon NEAR — « Dry Run » pare-feu qui simule avant de signer. Pas de clés FullAccess, pas de surprises.</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

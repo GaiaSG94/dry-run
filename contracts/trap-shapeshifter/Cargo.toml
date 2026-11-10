@@ -1,0 +1,21 @@
+[package]
+name = "trap-shapeshifter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "trap_shapeshifter"
+path = "src/lib.rs"
+
+[dependencies]
+near-sdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+borsh = { workspace = true }
+
+# `unit-testing` n'active `near_sdk::test_utils` que hors wasm32.
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

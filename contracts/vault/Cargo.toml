@@ -1,0 +1,22 @@
+[package]
+name = "vault"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Coffre du pare-feu à simulation « Dry Run » (contrat NEAR)"
+
+[lib]
+name = "vault"
+crate-type = ["cdylib"]
+
+[dependencies]
+near-sdk = { workspace = true }
+borsh = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Les tests unitaires ont besoin du faux bac à sable de near-sdk.
+# Ce feature n'entre pas dans le wasm : il n'est actif que pour `cargo test`.
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

@@ -1,0 +1,40 @@
+[package]
+name = "dryrun-gate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Garde-barrière et serveur HTTP pour le pare-feu Dry Run"
+
+# Le vrai simulateur (`dryrun-sim`) est branché par la feature `real-sim`.
+# Tant que `crates/dryrun-sim` n'expose pas l'API de la section 4 du SPEC,
+# la feature `stub` (active par défaut) fournit un simulateur en mémoire qui
+# respecte la même signature, afin que le crate compile et se teste seul.
+# Pour basculer sur le vrai chemin :
+#   cargo build -p dryrun-gate --no-default-features --features real-sim
+[features]
+default = ["stub"]
+stub = []
+real-sim = ["dep:dryrun-sim"]
+
+[dependencies]
+dryrun-core = { path = "../dryrun-core" }
+dryrun-sim = { path = "../dryrun-sim", optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+# Le client HTTP des tests : `rustls-tls` évite la dépendance système OpenSSL,
+# ce qui garde `cargo test` exécutable sur n'importe quelle machine locale.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[[bin]]
+name = "dryrun-gate"
+path = "src/main.rs"
+
+[lib]
+name = "dryrun_gate"
+path = "src/lib.rs"
