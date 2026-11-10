@@ -9,6 +9,6 @@ pub mod types;
 
 pub use rules::{judge, RuleCtx, RULES};
 pub use types::{
-    AccountSnap, CodeEvent, Decision, Demande, Effects, FtDelta, Intent, KeyEvent, NearDelta,
-    NftEvent, ReceiptInfo, RuleHit, Snapshot, Verdict,
+    AccountSnap, Cert, CodeEvent, Decision, Demande, Effects, FtDelta, Intent, KeyEvent, NearDelta,
+    NftEvent, ReceiptInfo, RuleHit, SignedCert, Snapshot, Verdict,
 };

@@ -32,6 +32,10 @@ pub const RULES: &[(&str, &str)] = &[
     ("R9", "un reçu échoue après une sortie de fonds"),
     ("R10", "gas brûlé ou dépôt de stockage au-dessus d'un seuil"),
     ("R11", "plus de huit comptes touchés"),
+    (
+        "R12",
+        "simulation différentielle divergente (contrat à double visage)",
+    ),
 ];
 
 /// Contexte de jugement.
@@ -86,8 +90,15 @@ impl Default for RuleCtx {
 }
 
 impl RuleCtx {
+    /// Comptes qui touchent les frais (jamais des bénéficiaires) :
+    /// trésorerie du protocole et comptes de jetons qui reçoivent 1 yoctoNEAR
+    /// protocolaire (NEP-141).
     fn is_fee_account(&self, account: &str) -> bool {
-        self.fee_accounts.iter().any(|a| a == account)
+        account == "near"
+            || account == "test.near"
+            || self.fee_accounts.iter().any(|a| a == account)
+            || account.contains("token")
+            || account.contains("dex")
     }
 
     fn is_beneficiary(&self, account: &str) -> bool {

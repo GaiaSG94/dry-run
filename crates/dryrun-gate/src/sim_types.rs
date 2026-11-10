@@ -57,3 +57,37 @@ pub struct Deployed {
     /// Compte → empreinte du code déployé.
     pub contracts: BTreeMap<String, String>,
 }
+
+/// Rapport de la simulation différentielle (V1) : les deux passages comparés.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DifferentialReport {
+    /// Taux reçu pour mille dépensé, au montant réel (pour mille).
+    pub rate_full: i128,
+    /// Taux reçu pour mille dépensé, au montant réduit (pour mille).
+    pub rate_small: i128,
+    /// Écart relatif entre les deux taux, en pour mille.
+    pub drift_permille: i128,
+    /// Vrai si l'écart dépasse la tolérance.
+    pub divergent: bool,
+    /// Vrai si un seul des deux passages a reçu quelque chose.
+    pub asymmetric: bool,
+}
+
+impl DifferentialReport {
+    /// Traduit le rapport produit par le simulateur.
+    pub fn from_parts(
+        rate_full: i128,
+        rate_small: i128,
+        drift_permille: i128,
+        divergent: bool,
+        asymmetric: bool,
+    ) -> Self {
+        DifferentialReport {
+            rate_full,
+            rate_small,
+            drift_permille,
+            divergent,
+            asymmetric,
+        }
+    }
+}

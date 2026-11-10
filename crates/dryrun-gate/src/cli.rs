@@ -22,6 +22,10 @@ pub enum Command {
     Attack,
     /// Sert la page web et l'API JSON.
     Serve { port: u16, web_dir: String },
+    /// Lance le banc de test automatisé de 200 robots (matrice de confusion).
+    Sim { seed: u64 },
+    /// Démarre le serveur MCP JSON-RPC sur stdin/stdout pour les agents IA.
+    Mcp,
     /// Affiche l'aide.
     Help,
 }
@@ -179,6 +183,14 @@ pub fn parse(args: &[String]) -> anyhow::Result<Command> {
             let (port, web_dir) = parse_serve(&args[1..])?;
             Command::Serve { port, web_dir }
         }
+        Some("sim") => {
+            let seed = args
+                .get(1)
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(42);
+            Command::Sim { seed }
+        }
+        Some("mcp") => Command::Mcp,
         Some("help") | Some("--help") | Some("-h") | None => Command::Help,
         Some(other) => anyhow::bail!("commande inconnue : {other} (essayer `help`)"),
     };

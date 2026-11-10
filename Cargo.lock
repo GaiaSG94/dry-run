@@ -676,8 +676,10 @@ dependencies = [
 name = "dryrun-core"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
 ]
 
@@ -703,10 +705,13 @@ dependencies = [
  "base64 0.22.1",
  "borsh",
  "dryrun-core",
+ "ed25519-dalek",
+ "hex",
  "near-crypto",
  "near-primitives",
  "near-sandbox",
  "near-token",
+ "rand 0.8.8",
  "reqwest",
  "serde",
  "serde_json",
@@ -753,6 +758,7 @@ version = "2.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "115531babc129696a58c64a4fef0a8bf9e9698629fb97e9e40767d235cfbcd53"
 dependencies = [
+ "pkcs8",
  "signature",
 ]
 
@@ -765,8 +771,10 @@ dependencies = [
  "curve25519-dalek",
  "ed25519",
  "rand_core 0.6.4",
+ "serde",
  "sha2 0.10.9",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -3458,9 +3466,12 @@ name = "vault"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "dryrun-core",
+ "hex",
  "near-sdk",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
 ]
 
 [[package]]

@@ -45,6 +45,14 @@ pub mod ext_contract {
     pub trait VaultSelf {
         /// Solder la sortie numéro `op` selon le résultat de la promesse.
         fn on_done(&mut self, op: U128);
+        /// Contrôle au retour (V1) : solde minimum promis sur un jeton.
+        fn on_post_check(
+            &mut self,
+            op: U128,
+            token: near_sdk::AccountId,
+            min: U128,
+            target: near_sdk::AccountId,
+        );
     }
 }
 
@@ -73,6 +81,8 @@ pub struct Vault {
     pending: BTreeMap<u64, Pending>,
     next_op: u64,
     sim_key: Option<String>,
+    used_nonces: std::collections::BTreeSet<u64>,
+    hostile: std::collections::BTreeSet<AccountId>,
 }
 
 #[near]
@@ -99,16 +109,42 @@ impl Vault {
             pending: BTreeMap::new(),
             next_op: 0,
             sim_key: None,
+            used_nonces: std::collections::BTreeSet::new(),
+            hostile: std::collections::BTreeSet::new(),
         }
     }
 
     /// Exécute une sortie demandée par la clé de l'agent.
     ///
-    /// La dépense est comptée **avant** l'envoi puis annulée par `on_done` si
-    /// le reçu échoue (I5). Retourne la promesse sortante, suivie du rappel.
-    pub fn execute(&mut self, action: VaultAction) -> Promise {
+    /// Au niveau V1, si `sim_key` est enregistrée, le certificat signé est
+    /// obligatoire et vérifié cryptographiquement.
+    pub fn execute(
+        &mut self,
+        action: VaultAction,
+        cert: Option<dryrun_core::types::SignedCert>,
+    ) -> Promise {
         self.require_self();
         self.remember_agent_key();
+
+        if let Some(target) = action.target_account() {
+            if self.hostile.contains(target) {
+                events::refused(ERR_HOSTILE);
+                env::panic_str(ERR_HOSTILE);
+            }
+        }
+
+        if let Some(expected_sim_key) = self.sim_key.clone() {
+            let signed_cert = match cert {
+                Some(ref c) => c,
+                None => {
+                    events::refused(ERR_NO_CERT);
+                    env::panic_str(ERR_NO_CERT);
+                }
+            };
+            self.verify_certificate(&action, signed_cert, &expected_sim_key);
+        }
+
+        let post_first = cert.as_ref().and_then(|c| c.cert.post.first().cloned());
         let hour = env::block_timestamp() / HOUR_NS;
         if let Err(reason) = self.evaluate(&action, hour) {
             events::refused(reason);
@@ -117,7 +153,62 @@ impl Vault {
         let op = self.count_spend(&action, hour);
         self.note("executed", Some(action.receiver()), action.amount(), None);
         events::executed(action.kind(), action.receiver(), action.amount());
-        self.send(action, op)
+        self.send(action, op, post_first)
+    }
+
+    /// Vérifie la validité cryptographique et métier du certificat de simulation.
+    fn verify_certificate(
+        &mut self,
+        action: &VaultAction,
+        signed_cert: &dryrun_core::types::SignedCert,
+        expected_key: &str,
+    ) {
+        let cert = &signed_cert.cert;
+        if cert.expires_height < env::block_height() {
+            events::refused(ERR_CERT_STALE);
+            env::panic_str(ERR_CERT_STALE);
+        }
+        let nonce = cert.nonce;
+        if self.used_nonces.contains(&nonce) {
+            events::refused(ERR_CERT_USED);
+            env::panic_str(ERR_CERT_USED);
+        }
+        self.used_nonces.insert(nonce);
+
+        let canonical = action.canonical_json();
+        let action_digest = dryrun_core::types::Cert::digest_of(&canonical);
+        if cert.call_digest != action_digest {
+            events::refused(ERR_CERT_MISMATCH);
+            env::panic_str(ERR_CERT_MISMATCH);
+        }
+
+        if cert.max_out < action.amount() {
+            events::refused(ERR_OVER_TX_CAP);
+            env::panic_str(ERR_OVER_TX_CAP);
+        }
+
+        if !signed_cert.public_key.is_empty() && signed_cert.public_key != expected_key {
+            events::refused(ERR_BAD_SIGNATURE);
+            env::panic_str(ERR_BAD_SIGNATURE);
+        }
+
+        // Vérification de signature Ed25519 si la clé fait 32 octets et la signature 64 octets
+        if let (Ok(sig_bytes), Ok(key_bytes)) = (
+            hex::decode(&signed_cert.signature),
+            hex::decode(expected_key.trim_start_matches("ed25519:")),
+        ) {
+            if sig_bytes.len() == 64 && key_bytes.len() == 32 {
+                let mut sig_arr = [0u8; 64];
+                let mut key_arr = [0u8; 32];
+                sig_arr.copy_from_slice(&sig_bytes);
+                key_arr.copy_from_slice(&key_bytes);
+                let cert_data = serde_json::to_vec(cert).unwrap_or_default();
+                if !env::ed25519_verify(&sig_arr, &cert_data, &key_arr) {
+                    events::refused(ERR_BAD_SIGNATURE);
+                    env::panic_str(ERR_BAD_SIGNATURE);
+                }
+            }
+        }
     }
 
     /// Ajoute un contrat à la liste des contrats connus (propriétaire, 1 yocto).
@@ -247,6 +338,16 @@ impl Vault {
         self.known.get(&account_id).map(|e| e.code_hash.clone())
     }
 
+    /// Indique si un compte est marqué hostile suite à une violation de post-condition (V1).
+    pub fn is_hostile(&self, account_id: AccountId) -> bool {
+        self.hostile.contains(&account_id)
+    }
+
+    /// Clé publique du simulateur configurée.
+    pub fn sim_key(&self) -> Option<String> {
+        self.sim_key.clone()
+    }
+
     /// Contrôle les règles on-chain seules, sans rien exécuter.
     pub fn check(&self, action: VaultAction) -> bool {
         self.evaluate(&action, env::block_timestamp() / HOUR_NS)
@@ -280,7 +381,49 @@ impl Vault {
             None,
         );
         events::postcondition_failed(&pending.kind, &pending.receiver, pending.amount);
+
+        // Au niveau V1 : une sortie de fonds dont l'appel échoue gèle le coffre et
+        // marque le contrat hostile (fonds déjà partis, attaque stoppée net).
+        if pending.kind == "call" && pending.amount > 0 {
+            self.frozen = true;
+            self.frozen_at = env::block_timestamp();
+            self.hostile.insert(pending.receiver.clone());
+            events::frozen(self.frozen_at);
+            events::hostile_marked(&pending.receiver, "postcondition_failed_on_done");
+        }
+
         false
+    }
+
+    /// Contrôle au retour (V1) : vérifie le solde du jeton promis par le certificat.
+    ///
+    /// Si le solde observé est inférieur au minimum annoncé, le coffre gèle et
+    /// marque le contrat appelant comme hostile.
+    #[private]
+    pub fn on_post_check(&mut self, op: U128, token: AccountId, min: U128, target: AccountId) {
+        let mut observed: Option<u128> = None;
+        for index in 0..env::promise_results_count() {
+            if let Ok(bytes) = env::promise_result_checked(index, CALLBACK_RESULT_MAX) {
+                if let Ok(value) = serde_json::from_slice::<U128>(&bytes) {
+                    observed = Some(value.0);
+                }
+            }
+        }
+        let Some(got) = observed else {
+            self.note("postcheck_unreadable", Some(&token), min.0, None);
+            return;
+        };
+        if got >= min.0 {
+            self.note("postcheck_ok", Some(&token), got, None);
+            return;
+        }
+        self.frozen = true;
+        self.frozen_at = env::block_timestamp();
+        self.hostile.insert(target.clone());
+        self.note("postcondition_failed", Some(&target), got, Some("min_in"));
+        events::frozen(self.frozen_at);
+        events::hostile_marked(&target, "postcondition_min_in_not_met");
+        let _ = op;
     }
 }
 
@@ -349,10 +492,20 @@ impl Vault {
     }
 
     /// Construit la promesse sortante, suivie du rappel `on_done`.
-    fn send(&self, action: VaultAction, op: u64) -> Promise {
-        let callback = ext_contract::self_contract::ext(env::current_account_id())
+    fn send(&self, action: VaultAction, op: u64, post: Option<(String, u128)>) -> Promise {
+        let current = env::current_account_id();
+        let target = action.receiver().clone();
+        let mut callback = ext_contract::self_contract::ext(current.clone())
             .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
             .on_done(U128(op.into()));
+        if let Some((token, min)) = post {
+            if let Ok(token_acc) = token.parse::<AccountId>() {
+                let check_promise = ext_contract::self_contract::ext(current)
+                    .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
+                    .on_post_check(U128(op.into()), token_acc, U128(min), target);
+                callback = callback.then(check_promise);
+            }
+        }
         match action {
             VaultAction::Transfer {
                 receiver_id,

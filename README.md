@@ -42,6 +42,12 @@ make demo
 
 # 4. Jouer le corpus des 6 contrats piégés avec et sans pare-feu
 make attack
+
+# 5. Lancer le banc de test robotisé (200 robots : matrice de confusion)
+make sim
+
+# 6. Démarrer le serveur MCP pour Claude Desktop / Cursor / ZeroClaw
+make mcp
 ```
 
 ### Ce que vous allez voir (`make demo`)
@@ -179,6 +185,7 @@ Face à un contrat piégé (`skimmer`) :
 | **R9** | Reçu en échec après sortie de fonds (`stranded`) | `BLOCK` | Contrats à mi-chemin (`half-step`) |
 | **R10** | Gas ou dépôt de stockage anormalement élevé | `WARN` | Gas bombs, storage hogs |
 | **R11** | Plus de 8 comptes touchés | `BLOCK` | Transactions trop complexes pour être certifiées |
+| **R12** | Divergence différentielle montant réel vs réduit (V1) | `BLOCK` | Contrats à double visage, évasion de bac à sable |
 
 ---
 
@@ -213,13 +220,13 @@ Dry Run s'appuie sur trois primitives fondamentales de NEAR :
 ```text
 dry-run/
 ├── Cargo.toml                       # Workspace Rust
-├── Makefile                         # make build, make demo, make attack, make test
+├── Makefile                         # make build, make demo, make attack, make sim, make mcp
 ├── crates/
-│   ├── dryrun-core/                 # Types partagés, moteur de règles (R1-R11), carte des effets
-│   ├── dryrun-sim/                  # Simulateur (near-sandbox, capture d'effets, décision)
-│   └── dryrun-gate/                 # Garde-barrière (CLI, serveur HTTP, frise)
+│   ├── dryrun-core/                 # Types partagés, moteur de règles (R1-R12), certificat, carte des effets
+│   ├── dryrun-sim/                  # Simulateur (near-sandbox, capture d'effets, certificat Ed25519, simulation différentielle)
+│   └── dryrun-gate/                 # Garde-barrière (CLI, serveur HTTP, MCP, banc de test 200 robots)
 ├── contracts/
-│   ├── vault/                       # Le coffre (plafonds glissants, known, gel, rappel on_done)
+│   ├── vault/                       # Le coffre (plafonds glissants, known, gel, certificat V1, marquage hostile)
 │   ├── good-dex/                    # DEX honnête de référence
 │   ├── test-token/                  # Jeton NEP-141 minimal (TEST)
 │   ├── test-nft/                    # NFT NEP-171 minimal
@@ -229,9 +236,11 @@ dry-run/
 │   ├── trap-liar/                   # Piège 4 : promet sans transférer
 │   ├── trap-approver/               # Piège 5 : tentative d'approbation NFT
 │   └── trap-shapeshifter/           # Piège 6 : altération de code
-├── web/                             # Interface graphique locale (carte en direct, frise, bouton de gel)
+├── web/                             # Interface graphique locale (carte en direct, frise, bouton de gel, scénarios 1-clic)
+├── scripts/                         # Scripts de déploiement testnet et d'enregistrement vidéo
 └── docs/
-    └── SPEC.md                      # Spécification d'interface complète
+    ├── SPEC.md                      # Spécification d'interface (Niveau M)
+    └── SPEC_V1_MAX.md               # Spécification V1 (Certificat, marquage hostile, simulation différentielle) et MAX
 ```
 
 ---
@@ -268,6 +277,10 @@ Fonctionnalités de l'interface :
 - [x] **Simulation exacte** : les variations de soldes simulées sont identiques aux variations réelles (+1 NEAR à bob).
 - [x] **Corpus de pièges** : les 6 contrats piégés (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`) sont bloqués avant signature (`make attack`).
 - [x] **Injection bloquée** : « envoie 49 NEAR à mallory » est bloqué par le pare-feu (R1) et rejeté on-chain (`ERR_OVER_TX_CAP`).
+- [x] **Certificat Ed25519 (V1)** : vérification cryptographique on-chain du certificat de simulation avant exécution.
+- [x] **Simulation différentielle (V1)** : démasquage des contrats à double visage via R12.
+- [x] **Matrice de performance** : `make sim` validé à 100 % de précision sur 200 robots synthétiques.
+- [x] **Serveur MCP** : intégration native pour agents Claude / Cursor / ZeroClaw via JSON-RPC.
 - [x] **Simulateur arrêté** : toute demande est refusée par précaution (« tout doute bloque »).
 - [x] **Autonomie** : `make demo` et `make attack` s'exécutent entièrement en local sans secret ni réseau en moins de 2 minutes.
 

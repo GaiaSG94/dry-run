@@ -54,6 +54,48 @@ impl VaultAction {
     pub fn is_call(&self) -> bool {
         matches!(self, VaultAction::Call { .. })
     }
+
+    /// Compte appelé si l'action est un appel de contrat.
+    pub fn target_account(&self) -> Option<&AccountId> {
+        match self {
+            VaultAction::Call { receiver_id, .. } => Some(receiver_id),
+            _ => None,
+        }
+    }
+
+    /// Forme canonique de l'action, identique à celle calculée par le simulateur.
+    ///
+    /// C'est cette représentation qui est condensée dans le certificat : les
+    /// deux côtés (garde-barrière et contrat) construisent le même objet.
+    pub fn canonical_json(&self) -> serde_json::Value {
+        match self {
+            VaultAction::Transfer {
+                receiver_id,
+                amount,
+            } => dryrun_core::types::canonical_action(
+                "transfer",
+                receiver_id.as_str(),
+                "",
+                "",
+                amount.0,
+                0,
+            ),
+            VaultAction::Call {
+                receiver_id,
+                method_name,
+                args,
+                deposit,
+                gas,
+            } => dryrun_core::types::canonical_action(
+                "call",
+                receiver_id.as_str(),
+                method_name,
+                args,
+                deposit.0,
+                gas.as_gas(),
+            ),
+        }
+    }
 }
 
 /// Plafonds du coffre, en yoctoNEAR.

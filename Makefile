@@ -42,6 +42,18 @@ attack: build
 	@echo "==> Lancement du corpus d'attaque..."
 	@$(CARGO) run --release -p dryrun-gate -- attack
 
+sim: build
+	@echo "==> Lancement du banc de test automatisé (200 robots)..."
+	@$(CARGO) run --release -p dryrun-gate -- sim 42
+
+mcp: build
+	@echo "==> Démarrage du serveur MCP Dry Run..."
+	@$(CARGO) run --release -p dryrun-gate -- mcp
+
+demo-testnet:
+	@echo "==> Vérification / déploiement NEAR Testnet..."
+	@./scripts/demo-testnet.sh
+
 clean:
 	@$(CARGO) clean
 

@@ -134,7 +134,7 @@ pub fn call(to: &str, method: &str, deposit: u128) -> VaultAction {
 /// Exécute une action ; rend le code de refus, ou `None` si elle est passée.
 pub fn run(fx: &mut Fixture, action: VaultAction) -> Option<String> {
     attempt(|| {
-        let promise = fx.vault.execute(action);
+        let promise = fx.vault.execute(action, None);
         drop(promise);
     })
 }
@@ -175,13 +175,25 @@ fn panic_message(payload: &(dyn Any + Send)) -> String {
     }
 }
 
-/// Installe un contexte de bloc : appelant, dépôt joint, date, résultat éventuel.
+/// Installe un contexte de bloc : appelant, dépôt joint, date, hauteur, résultat éventuel.
 fn set_env(caller: &str, deposit: u128, at: u64, result: Option<PromiseResult>) {
+    set_env_at_height(caller, deposit, at, 1, result)
+}
+
+/// Même chose, avec une hauteur de bloc explicite (utile aux certificats V1).
+pub fn set_env_at_height(
+    caller: &str,
+    deposit: u128,
+    at: u64,
+    height: u64,
+    result: Option<PromiseResult>,
+) {
     let ctx = VMContextBuilder::new()
         .current_account_id(acct(VAULT))
         .predecessor_account_id(acct(caller))
         .signer_account_id(acct(caller))
         .block_timestamp(at)
+        .block_height(height)
         .attached_deposit(NearToken::from_yoctonear(deposit))
         .build();
     let results: Vec<PromiseResult> = result.into_iter().collect();

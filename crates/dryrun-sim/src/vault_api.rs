@@ -8,6 +8,7 @@
 use anyhow::{Context, Result};
 use serde_json::{json, Value};
 
+use dryrun_core::types::SignedCert;
 use dryrun_core::Demande;
 
 use crate::accounts;
@@ -47,6 +48,10 @@ impl serde::Serialize for VaultStatus {
 }
 
 /// Encode une demande en actions `VaultAction` candidates (voir l'entête).
+///
+/// La forme envoyée importe peu au certificat : le coffre recomputera le
+/// condensé depuis l'action **désérialisée**, via la même fonction canonique
+/// (`dryrun_core::types::canonical_action`).
 pub fn action_variants(demand: &Demande) -> Vec<Value> {
     match demand {
         Demande::Transfer { to, amount } => {
@@ -60,7 +65,7 @@ pub fn action_variants(demand: &Demande) -> Vec<Value> {
             deposit,
             gas,
         } => {
-            let encoded = serde_json::to_string(args).unwrap_or_else(|_| "null".to_string());
+            let encoded = dryrun_core::types::encode_args(args);
             let base = json!({
                 "receiver_id": contract,
                 "method_name": method,
@@ -76,15 +81,6 @@ pub fn action_variants(demand: &Demande) -> Vec<Value> {
     }
 }
 
-/// Arguments de l'appel `execute(action: VaultAction)`, dans toutes les formes
-/// tolérées (near-sdk attend un objet `{"action": ...}`).
-pub fn execute_args(demand: &Demande) -> Vec<Value> {
-    action_variants(demand)
-        .into_iter()
-        .map(|action| json!({ "action": action }))
-        .collect()
-}
-
 /// Copie la charge utile en y ajoutant le champ `gas`.
 fn with_gas(base: &Value, gas: &impl serde::Serialize) -> Value {
     let mut payload = base.clone();
@@ -92,6 +88,36 @@ fn with_gas(base: &Value, gas: &impl serde::Serialize) -> Value {
         object.insert("gas".to_string(), json!(gas));
     }
     payload
+}
+
+/// Arguments de l'appel `execute(action, cert)`, avec ou sans certificat.
+///
+/// Le contrat exige le champ `cert` (même à `null`) : sans lui, la
+/// désérialisation échoue et le coffre n'exécute rien.
+pub fn execute_args(demand: &Demande) -> Vec<Value> {
+    execute_args_with_cert(demand, None)
+}
+
+/// Même chose, avec un certificat de simulation signé (niveau V1).
+pub fn execute_args_with_cert(demand: &Demande, cert: Option<&SignedCert>) -> Vec<Value> {
+    let cert_value = match cert {
+        Some(signed) => serde_json::to_value(signed).unwrap_or(Value::Null),
+        None => Value::Null,
+    };
+    action_variants(demand)
+        .into_iter()
+        .map(|action| json!({ "action": action, "cert": cert_value }))
+        .collect()
+}
+
+/// Arguments de l'appel `execute(action, cert)` avec un certificat signé (V1).
+pub fn execute_args_certified(demand: &Demande, cert: &SignedCert) -> Vec<Value> {
+    execute_args_with_cert(demand, Some(cert))
+}
+
+/// Arguments de l'appel `set_sim_key` par le propriétaire (1 yoctoNEAR).
+pub fn set_sim_key_args(public_key: &str) -> Value {
+    json!({ "public_key": public_key })
 }
 
 /// Lit `status()` sur le coffre.

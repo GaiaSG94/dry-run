@@ -34,6 +34,9 @@ pub const AGENT_ALLOWANCE: u128 = 10u128.pow(24);
 pub const FREEZE_ALLOWANCE: u128 = 0;
 /// Solde donné à chaque compte de la démo à la genèse (en NEAR).
 const FUNDS: u128 = 100;
+
+/// Réserve de TEST du DEX, en yoctoNEAR du jeton (18 décimales).
+pub const DEMO_RESERVE: u128 = 1_000 * 10u128.pow(18);
 /// Solde du coffre à la genèse (en NEAR).
 const VAULT_FUNDS: u128 = 50;
 
@@ -150,6 +153,7 @@ impl Chain {
                 None => tracing::warn!(wasm = spec.wasm, "wasm absent : contrat non déployé"),
             }
         }
+        self.bootstrap_demo().await?;
         if deployed.contracts.contains_key(accounts::VAULT) {
             let vault: AccountId = accounts::VAULT.parse()?;
             deployed.vault_keys = self
@@ -230,6 +234,151 @@ impl Chain {
             self.init_vault().await?;
         }
         Ok(Some(code_hash))
+    }
+
+    /// Prépare les contrats de démonstration : jetons, réserve du DEX, NFT.
+    ///
+    /// Chaque étape est idempotente : relancer la démo ne casse rien.
+    async fn bootstrap_demo(&self) -> Result<()> {
+        // 1. Jeton TEST : le propriétaire détient la réserve d'émission.
+        self.try_call(
+            accounts::OWNER,
+            accounts::TEST_TOKEN,
+            "new",
+            &json!({ "owner_id": accounts::OWNER }),
+        )
+        .await?;
+
+        // 2. DEX : il connaît son jeton et son propriétaire.
+        self.try_call(
+            accounts::OWNER,
+            "good-dex.test.near",
+            "new",
+            &json!({ "owner_id": accounts::OWNER, "token_id": accounts::TEST_TOKEN }),
+        )
+        .await?;
+
+        // 3. Réserve du DEX : 1 000 TEST frappés puis déclarés à la réserve du DEX.
+        self.try_call(
+            accounts::OWNER,
+            accounts::TEST_TOKEN,
+            "mint_to",
+            &json!({ "account_id": "good-dex.test.near", "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            "good-dex.test.near",
+            "fund",
+            &json!({ "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+
+        // 4. Skimmer : réserve de TEST pour détourner 20 %.
+        self.try_call(
+            accounts::OWNER,
+            "skimmer.test.near",
+            "new",
+            &json!({
+                "owner_id": accounts::OWNER,
+                "token_id": accounts::TEST_TOKEN,
+                "skim_to": accounts::MALLORY,
+            }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            accounts::TEST_TOKEN,
+            "mint_to",
+            &json!({ "account_id": "skimmer.test.near", "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            "skimmer.test.near",
+            "fund",
+            &json!({ "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+
+        // 5. Shapeshifter : réserve de TEST pour le premier passage.
+        self.try_call(
+            accounts::OWNER,
+            "shapeshifter.test.near",
+            "new",
+            &json!({ "owner_id": accounts::OWNER, "token_id": accounts::TEST_TOKEN }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            accounts::TEST_TOKEN,
+            "mint_to",
+            &json!({ "account_id": "shapeshifter.test.near", "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            "shapeshifter.test.near",
+            "fund",
+            &json!({ "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+
+        // 6. Approver : collection visée et voleur.
+        self.try_call(
+            accounts::OWNER,
+            "approver.test.near",
+            "new",
+            &json!({ "collection": accounts::TEST_NFT, "thief": accounts::MALLORY }),
+        )
+        .await?;
+
+        // 7. NFT : l'émetteur, puis un jeton dans le coffre (piège `approver`).
+        self.try_call(
+            accounts::OWNER,
+            accounts::TEST_NFT,
+            "new",
+            &json!({ "owner_id": accounts::OWNER }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            accounts::TEST_NFT,
+            "mint_to",
+            &json!({ "to": accounts::VAULT, "token_id": "1" }),
+        )
+        .await?;
+
+        Ok(())
+    }
+
+    /// Appelle une méthode d'initialisation en ignorant un échec bénin.
+    ///
+    /// Les contrats refusent une seconde initialisation : c'est attendu et
+    /// sans conséquence quand la démo est relancée sur le même bac à sable.
+    async fn try_call(
+        &self,
+        signer: &str,
+        receiver: &str,
+        method: &str,
+        args: &Value,
+    ) -> Result<()> {
+        match self.call(signer, receiver, method, args, 0, INIT_GAS).await {
+            Ok(outcome) if outcome.success => Ok(()),
+            Ok(outcome) => {
+                tracing::debug!(
+                    method,
+                    receiver,
+                    error = ?outcome.error,
+                    "initialisation ignorée (déjà faite ou contrat absent)"
+                );
+                Ok(())
+            }
+            Err(err) => {
+                tracing::debug!(method, receiver, %err, "initialisation ignorée");
+                Ok(())
+            }
+        }
     }
 
     /// Le compte porte-t-il déjà exactement ces octets de code ?

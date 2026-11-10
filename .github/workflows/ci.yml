@@ -35,5 +35,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests unitaires (sans bac à sable)
         run: cargo test --workspace --lib --bins
+      - name: Banc de test 200 robots (make sim)
+        run: cargo run --release -p dryrun-gate -- sim 42
       - name: Build WASM des contrats
         run: cargo build --target wasm32-unknown-unknown --release -p vault -p good-dex -p test-token -p test-nft -p trap-drainer -p trap-skimmer -p trap-half-step -p trap-liar -p trap-approver -p trap-shapeshifter

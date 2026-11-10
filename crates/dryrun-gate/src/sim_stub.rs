@@ -13,11 +13,11 @@ use dryrun_core::judge;
 use dryrun_core::rules::RuleCtx;
 use dryrun_core::types::{
     AccountSnap, CodeEvent, Decision, Demande, Effects, FtDelta, Intent, KeyEvent, NearDelta,
-    NftEvent, ReceiptInfo, RuleHit, Snapshot, Verdict, Yocto,
+    NftEvent, ReceiptInfo, RuleHit, SignedCert, Snapshot, Verdict, Yocto,
 };
 
 use crate::amount::Amount;
-use crate::sim_types::{Caps, Deployed, ExecOutcome, VaultStatus};
+use crate::sim_types::{Caps, Deployed, DifferentialReport, ExecOutcome, VaultStatus};
 
 /// Compte du coffre simulé.
 pub const VAULT: &str = "vault.test.near";
@@ -118,6 +118,58 @@ impl Simulator {
     }
 
     /// État du faux coffre.
+    /// Simulation différentielle : le bouchon n'en a pas, il rend un rapport neutre.
+    pub async fn simulate_differential(
+        &self,
+        demand: &Demande,
+        intent: &Intent,
+    ) -> anyhow::Result<(Decision, DifferentialReport)> {
+        Ok((
+            self.simulate(demand, intent).await?,
+            DifferentialReport::default(),
+        ))
+    }
+
+    /// Clé publique factice du bouchon.
+    pub fn sim_public_key(&self) -> String {
+        "0".repeat(64)
+    }
+
+    /// Le bouchon n'a pas de coffre : l'installation est un succès sans effet.
+    pub async fn install_sim_key(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    /// Certificat factice : le bouchon ne vérifie rien.
+    pub async fn sign_cert(
+        &self,
+        demand: &Demande,
+        _effects: &Effects,
+        post: Vec<(String, u128)>,
+    ) -> anyhow::Result<SignedCert> {
+        Ok(SignedCert {
+            cert: dryrun_core::types::Cert {
+                call_digest: dryrun_core::types::Cert::compute_digest(demand),
+                snapshot_height: 0,
+                expires_height: 20,
+                max_out: demand.amount(),
+                post,
+                nonce: 1,
+            },
+            signature: "0".repeat(128),
+            public_key: self.sim_public_key(),
+        })
+    }
+
+    /// Exécution sans certificat (le bouchon ignore le certificat).
+    pub async fn execute_with_cert(
+        &self,
+        demand: &Demande,
+        _cert: Option<&SignedCert>,
+    ) -> anyhow::Result<ExecOutcome> {
+        self.execute(demand).await
+    }
+
     pub async fn vault_status(&self) -> anyhow::Result<VaultStatus> {
         let state = read(&self.state)?;
         Ok(VaultStatus {

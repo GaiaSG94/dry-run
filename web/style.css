@@ -186,3 +186,47 @@ textarea { resize: vertical; font-family: var(--mono); font-size: 0.85rem; }
     color: var(--text-muted); border-top: 1px solid var(--border);
 }
 .hidden { display: none !important; }
+
+/* ---------- Scénarios rapides ---------- */
+.scenarios-section { margin-bottom: 1.5rem; }
+.scenarios-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+}
+.scenario-btn {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    text-align: left;
+    padding: 0.85rem 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--border, #30363d);
+    background: var(--bg-card, #161b22);
+    color: inherit;
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.scenario-btn:hover:not(:disabled) { transform: translateY(-2px); }
+.scenario-btn:disabled { opacity: 0.55; cursor: wait; }
+.scenario-btn strong { font-size: 0.95rem; }
+.scenario-btn small { opacity: 0.75; font-size: 0.8rem; }
+.btn-sc-allow { border-left: 4px solid #2ea043; }
+.btn-sc-block { border-left: 4px solid #da3633; }
+.sc-badge {
+    align-self: flex-start;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: #21262d;
+}
+
+/* ---------- Certificat ---------- */
+.cert-box { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.85rem; }
+.cert-row { display: flex; justify-content: space-between; gap: 1rem; }
+.cert-label { opacity: 0.7; }
+.cert-box code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; }
+.cert-status { margin-top: 0.35rem; font-weight: 700; }
+.cert-ok { color: #3fb950; }

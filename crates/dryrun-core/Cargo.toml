@@ -10,6 +10,8 @@ description = "Types partagés et moteur de règles du pare-feu à simulation (D
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
 
 [lib]
 name = "dryrun_core"

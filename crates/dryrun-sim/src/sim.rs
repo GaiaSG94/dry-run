@@ -59,7 +59,11 @@ pub async fn replay(chain: &Chain, demand: &Demande, intent: &Intent) -> Result<
     let debut = std::time::Instant::now();
     let sim = SimSandbox::start().await?;
     let watched = watch_list(demand, intent);
-    let token = token_present(chain).await;
+    let token = match intent.min_in.first().map(|(t, _)| t.as_str()) {
+        Some("TEST") => Some("test-token.test.near".to_string()),
+        Some(other) if other.ends_with(".near") => Some(other.to_string()),
+        _ => token_present(chain).await,
+    };
     load_state(chain, &sim, demand, &watched, token.as_deref()).await?;
     let before = effects::snapshot(&sim.rpc, &watched, token.as_deref()).await?;
     let execution = run(&sim, demand).await?;
@@ -113,6 +117,14 @@ pub fn watch_list(demand: &Demande, intent: &Intent) -> Vec<String> {
     }
     for name in accounts::WATCHED_PLAIN {
         push(name, &mut out);
+    }
+    // Si l'intention mentionne un jeton, le contrat du jeton doit être copié
+    for (name, _) in &intent.min_in {
+        if name == "TEST" {
+            push("test-token.test.near", &mut out);
+        } else if name.ends_with(".near") {
+            push(name, &mut out);
+        }
     }
     out
 }

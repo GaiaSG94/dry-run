@@ -2,12 +2,14 @@
 
 pub mod amount;
 pub mod backend;
+pub mod bench;
 pub mod cardfmt;
 pub mod cli;
 pub mod demo;
 pub mod gate;
 pub mod http;
 pub mod journal;
+pub mod mcp;
 #[cfg(feature = "real-sim")]
 pub mod sim_real;
 pub mod sim_stub;

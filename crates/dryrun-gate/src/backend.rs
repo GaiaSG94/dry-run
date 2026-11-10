@@ -24,7 +24,10 @@ macro_rules! dispatch {
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use dryrun_core::types::{Decision, Demande, Intent};
+use dryrun_core::types::{Decision, Demande, Effects, Intent, SignedCert};
+
+/// Rapport de la simulation différentielle, commun aux deux simulateurs.
+pub type DifferentialReport = crate::sim_types::DifferentialReport;
 
 #[cfg(feature = "real-sim")]
 use crate::sim_real;
@@ -97,9 +100,51 @@ impl Simulator {
         dispatch!(self, sim => sim.simulate(demand, intent).await)
     }
 
+    /// Simule deux fois (montant réel et centième) et rend décision + rapport.
+    pub async fn simulate_differential(
+        &self,
+        demand: &Demande,
+        intent: &Intent,
+    ) -> anyhow::Result<(Decision, DifferentialReport)> {
+        dispatch!(self, sim => sim.simulate_differential(demand, intent).await)
+    }
+
+    /// Clé publique du simulateur (hexadécimal), pour le coffre.
+    pub fn sim_public_key(&self) -> String {
+        match self {
+            Self::Stub(sim) => sim.sim_public_key(),
+            #[cfg(feature = "real-sim")]
+            Self::Real(sim) => sim.sim_public_key(),
+        }
+    }
+
+    /// Le propriétaire enregistre la clé du simulateur sur le coffre (V1).
+    pub async fn install_sim_key(&self) -> anyhow::Result<()> {
+        dispatch!(self, sim => sim.install_sim_key().await)
+    }
+
+    /// Signe un certificat pour une demande déjà simulée (V1).
+    pub async fn sign_cert(
+        &self,
+        demand: &Demande,
+        effects: &Effects,
+        post: Vec<(String, u128)>,
+    ) -> anyhow::Result<SignedCert> {
+        dispatch!(self, sim => sim.sign_cert(demand, effects, post).await)
+    }
+
     /// Exécute réellement une demande sur la chaîne.
     pub async fn execute(&self, demand: &Demande) -> anyhow::Result<ExecOutcome> {
         dispatch!(self, sim => sim.execute(demand).await)
+    }
+
+    /// Exécute une demande avec son certificat signé (V1).
+    pub async fn execute_with_cert(
+        &self,
+        demand: &Demande,
+        cert: Option<&SignedCert>,
+    ) -> anyhow::Result<ExecOutcome> {
+        dispatch!(self, sim => sim.execute_with_cert(demand, cert).await)
     }
 
     /// État du coffre.

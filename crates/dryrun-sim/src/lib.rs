@@ -12,7 +12,9 @@
 //! à celui de `near-sandbox`.
 
 pub mod accounts;
+pub mod cert;
 pub mod chain;
+pub mod differential;
 pub mod effects;
 pub mod outcome;
 pub mod rpc;
@@ -23,14 +25,17 @@ pub mod vault_api;
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 use serde_json::json;
 
-use dryrun_core::types::KnownContracts;
+use dryrun_core::types::{KnownContracts, SignedCert};
 use dryrun_core::{Decision, Demande, Effects, Intent, RuleCtx, Verdict};
 
+pub use cert::CertSigner;
 pub use chain::{AccountState, Chain, Deployed, TxOutcome};
+pub use differential::{differential_hit, DifferentialReport};
 pub use effects::SnapshotSet;
 pub use outcome::Execution;
 pub use rpc::Rpc;
@@ -39,6 +44,22 @@ pub use vault_api::VaultStatus;
 
 /// Gaz maximum d'un appel `execute` (la clé d'agent ne peut rien faire d'autre).
 pub const EXECUTE_GAS: u64 = 100_000_000_000_000;
+
+/// Fraîcheur d'un certificat, en blocs (vingt blocs, comme l'instantané).
+pub const CERT_FRESHNESS_BLOCKS: u64 = 20;
+
+/// Diviseur du montant pour le second passage de la simulation différentielle.
+pub const DIFFERENTIAL_DIVISOR: u128 = 100;
+
+/// Sortie de fonds du coffre observée dans un rapport d'effets.
+fn outflow_of(effects: &Effects, vault: &str) -> u128 {
+    effects
+        .near_delta
+        .iter()
+        .filter(|delta| delta.account == vault && delta.delta < 0)
+        .map(|delta| delta.delta.unsigned_abs())
+        .sum()
+}
 
 /// Ce que l'exécution réelle a donné.
 #[derive(Clone, Debug, Default)]
@@ -70,6 +91,8 @@ impl From<Execution> for ExecOutcome {
 pub struct Simulator {
     chain: Chain,
     vault: String,
+    signer: CertSigner,
+    nonce: AtomicU64,
 }
 
 impl Simulator {
@@ -90,6 +113,8 @@ impl Simulator {
         Ok(Simulator {
             chain: Chain::start(wasm_dir).await?,
             vault: accounts::VAULT.to_string(),
+            signer: CertSigner::new(),
+            nonce: AtomicU64::new(1),
         })
     }
 
@@ -133,8 +158,24 @@ impl Simulator {
 
     /// Exécute réellement une demande sur la chaîne, avec la clé d'agent limitée.
     pub async fn execute(&self, demand: &Demande) -> Result<ExecOutcome> {
+        self.execute_with_cert(demand, None).await
+    }
+
+    /// Exécute une demande avec son certificat de simulation (niveau V1).
+    ///
+    /// Sans certificat, le coffre n'exécute rien dès qu'une clé de simulateur
+    /// est enregistrée : voler la clé de l'agent ne suffit plus.
+    pub async fn execute_with_cert(
+        &self,
+        demand: &Demande,
+        cert: Option<&SignedCert>,
+    ) -> Result<ExecOutcome> {
+        let candidates = match cert {
+            Some(signed) => vault_api::execute_args_certified(demand, signed),
+            None => vault_api::execute_args(demand),
+        };
         let mut last: Option<ExecOutcome> = None;
-        for candidate in vault_api::execute_args(demand) {
+        for candidate in candidates {
             let execution = self
                 .chain
                 .call_with_agent(&self.vault, "execute", &candidate, EXECUTE_GAS)
@@ -146,6 +187,80 @@ impl Simulator {
             last = Some(outcome);
         }
         Ok(last.unwrap_or_default())
+    }
+
+    /// Clé publique du simulateur (hexadécimal), à enregistrer dans le coffre.
+    pub fn sim_public_key(&self) -> String {
+        self.signer.public_key_hex()
+    }
+
+    /// Le propriétaire enregistre la clé du simulateur sur le coffre (1 yocto).
+    pub async fn install_sim_key(&self) -> Result<()> {
+        let outcome = self
+            .chain
+            .call(
+                accounts::OWNER,
+                &self.vault,
+                "set_sim_key",
+                &vault_api::set_sim_key_args(&self.sim_public_key()),
+                1,
+                EXECUTE_GAS,
+            )
+            .await?;
+        if !outcome.success {
+            anyhow::bail!(
+                "enregistrement de la clé de simulateur refusé : {}",
+                outcome.error.clone().unwrap_or_default()
+            );
+        }
+        Ok(())
+    }
+
+    /// Signe un certificat pour une demande déjà simulée.
+    ///
+    /// `post` porte les soldes minimaux promis (contrôle au retour, V1).
+    pub async fn sign_cert(
+        &self,
+        demand: &Demande,
+        effects: &Effects,
+        post: Vec<(String, u128)>,
+    ) -> Result<SignedCert> {
+        let height = effects
+            .snapshot
+            .height
+            .max(self.chain.height().await.unwrap_or(0));
+        let cert = dryrun_core::types::Cert {
+            call_digest: dryrun_core::types::Cert::compute_digest(demand),
+            snapshot_height: height,
+            expires_height: height + CERT_FRESHNESS_BLOCKS,
+            max_out: demand.amount().max(outflow_of(effects, &self.vault)),
+            post,
+            nonce: self.nonce.fetch_add(1, Ordering::SeqCst),
+        };
+        Ok(self.signer.sign(cert))
+    }
+
+    /// Simule deux fois, au montant réel et au centième, et compare les taux.
+    ///
+    /// Démasque les contrats à double visage et ceux qui reconnaissent le bac
+    /// à sable (règle R12).
+    pub async fn simulate_differential(
+        &self,
+        demand: &Demande,
+        intent: &Intent,
+    ) -> Result<(Decision, DifferentialReport)> {
+        let full = sim::replay(&self.chain, demand, intent).await?;
+        let ctx = self.rule_ctx(demand, intent, &full.effects).await?;
+        let mut decision = decide(&ctx, &full.effects);
+
+        let small_demand = differential::scaled(demand, DIFFERENTIAL_DIVISOR);
+        let small = sim::replay(&self.chain, &small_demand, intent).await?;
+        let report = differential::compare(&self.vault, intent, &full.effects, &small.effects);
+        if let Some(hit) = differential::differential_hit(&report) {
+            decision.rules.push(hit);
+            decision.verdict = Verdict::Block;
+        }
+        Ok((decision, report))
     }
 
     /// Le propriétaire approuve un contrat au code **actuel** (1 yoctoNEAR).

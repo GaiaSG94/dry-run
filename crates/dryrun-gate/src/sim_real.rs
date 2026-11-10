@@ -8,11 +8,11 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use dryrun_core::types::{Decision, Demande, Intent};
+use dryrun_core::types::{Decision, Demande, Effects, Intent, SignedCert};
 use serde_json::Value;
 
 use crate::amount::Amount;
-use crate::sim_types::{Deployed, ExecOutcome, VaultStatus};
+use crate::sim_types::{Deployed, DifferentialReport, ExecOutcome, VaultStatus};
 
 /// Simulateur réel : fine enveloppe autour de `dryrun_sim::Simulator`.
 pub struct Simulator {
@@ -43,6 +43,64 @@ impl Simulator {
     /// Exécute réellement une demande sur la chaîne (clé limitée de l'agent).
     pub async fn execute(&self, demand: &Demande) -> anyhow::Result<ExecOutcome> {
         let outcome = self.inner.execute(demand).await?;
+        Ok(ExecOutcome {
+            success: outcome.success,
+            tx_hash: outcome
+                .refusal
+                .clone()
+                .or_else(|| outcome.message.clone())
+                .unwrap_or_else(|| "exécution transmise".to_string()),
+            gas_burnt: outcome.gas_burnt,
+            logs: outcome.logs,
+        })
+    }
+
+    /// Simule deux fois (montant réel et centième) et rend décision + rapport.
+    pub async fn simulate_differential(
+        &self,
+        demand: &Demande,
+        intent: &Intent,
+    ) -> anyhow::Result<(Decision, DifferentialReport)> {
+        let (decision, report) = self.inner.simulate_differential(demand, intent).await?;
+        Ok((
+            decision,
+            DifferentialReport::from_parts(
+                report.rate_full,
+                report.rate_small,
+                report.drift_permille,
+                report.divergent,
+                report.asymmetric,
+            ),
+        ))
+    }
+
+    /// Clé publique du simulateur (hexadécimal).
+    pub fn sim_public_key(&self) -> String {
+        self.inner.sim_public_key()
+    }
+
+    /// Enregistre la clé du simulateur sur le coffre (action propriétaire).
+    pub async fn install_sim_key(&self) -> anyhow::Result<()> {
+        self.inner.install_sim_key().await
+    }
+
+    /// Signe un certificat de simulation pour une demande déjà simulée.
+    pub async fn sign_cert(
+        &self,
+        demand: &Demande,
+        effects: &Effects,
+        post: Vec<(String, u128)>,
+    ) -> anyhow::Result<SignedCert> {
+        self.inner.sign_cert(demand, effects, post).await
+    }
+
+    /// Exécute une demande avec son certificat (ou sans).
+    pub async fn execute_with_cert(
+        &self,
+        demand: &Demande,
+        cert: Option<&SignedCert>,
+    ) -> anyhow::Result<ExecOutcome> {
+        let outcome = self.inner.execute_with_cert(demand, cert).await?;
         Ok(ExecOutcome {
             success: outcome.success,
             tx_hash: outcome

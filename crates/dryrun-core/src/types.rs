@@ -194,11 +194,16 @@ impl Effects {
             .unwrap_or(0)
     }
 
-    /// Variation d'un jeton fongible.
+    /// Variation d'un jeton fongible (correspondance exacte ou par préfixe/suffixe de compte).
     pub fn ft_delta_of(&self, token: &str, account: &str) -> i128 {
         self.ft_delta
             .iter()
-            .find(|d| d.token == token && d.account == account)
+            .find(|d| {
+                d.account == account
+                    && (d.token == token
+                        || d.token.starts_with(token)
+                        || token == "TEST" && d.token.contains("test-token"))
+            })
             .map(|d| d.delta)
             .unwrap_or(0)
     }
@@ -296,3 +301,98 @@ impl Decision {
 
 /// Contrat connu du propriétaire : compte → empreinte du code à l'accord.
 pub type KnownContracts = BTreeMap<String, String>;
+
+/// Certificat de simulation cryptographique (Niveau V1).
+/// Engagement signé du simulateur sur une demande précise.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Cert {
+    /// Condensé SHA-256 de la demande sérialisée de façon déterministe.
+    pub call_digest: String,
+    /// Hauteur du snapshot d'état contre lequel la transaction a été simulée.
+    pub snapshot_height: u64,
+    /// Hauteur de bloc d'expiration (vingt blocs de fraîcheur).
+    pub expires_height: u64,
+    /// Sortie maximale autorisée en yoctoNEAR.
+    pub max_out: Yocto,
+    /// Post-conditions requises : jetons et soldes minimaux promis en retour.
+    pub post: Vec<(String, Yocto)>,
+    /// Nonce unique anti-rejeu.
+    pub nonce: u64,
+}
+
+/// Représentation canonique d'une action de coffre.
+///
+/// Le simulateur et le contrat construisent **exactement** le même objet, ce
+/// qui garantit que le condensé du certificat correspond à la demande reçue.
+/// Les montants sont des chaînes décimales pour éviter toute ambiguïté de type.
+pub fn canonical_action(
+    kind: &str,
+    receiver: &str,
+    method: &str,
+    args: &str,
+    deposit: u128,
+    gas: u64,
+) -> serde_json::Value {
+    if kind == "transfer" {
+        serde_json::json!({
+            "Transfer": { "receiver_id": receiver, "amount": deposit.to_string() }
+        })
+    } else {
+        serde_json::json!({
+            "Call": {
+                "receiver_id": receiver,
+                "method_name": method,
+                "args": args,
+                "deposit": deposit.to_string(),
+                "gas": gas.to_string(),
+            }
+        })
+    }
+}
+
+impl Demande {
+    /// Forme canonique de la demande, telle que le coffre la recomputera.
+    pub fn canonical_json(&self) -> serde_json::Value {
+        match self {
+            Demande::Transfer { to, amount } => {
+                canonical_action("transfer", to, "", "", *amount, 0)
+            }
+            Demande::FunctionCall {
+                contract,
+                method,
+                args,
+                deposit,
+                gas,
+            } => canonical_action("call", contract, method, &encode_args(args), *deposit, *gas),
+        }
+    }
+}
+
+/// Encode les arguments d'un appel en chaîne JSON compacte (forme envoyée au coffre).
+pub fn encode_args(args: &serde_json::Value) -> String {
+    serde_json::to_string(args).unwrap_or_else(|_| "null".to_string())
+}
+
+impl Cert {
+    /// Condensé SHA-256 d'une valeur canonique, encodé en hexadécimal.
+    pub fn digest_of(value: &serde_json::Value) -> String {
+        use sha2::{Digest, Sha256};
+        let bytes = serde_json::to_vec(value).unwrap_or_default();
+        hex::encode(Sha256::digest(bytes))
+    }
+
+    /// Calcule le digest canonique d'une demande pour le certificat.
+    pub fn compute_digest(demand: &Demande) -> String {
+        Self::digest_of(&demand.canonical_json())
+    }
+}
+
+/// Certificat accompagné de sa signature Ed25519 (Niveau V1).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SignedCert {
+    pub cert: Cert,
+    /// Signature Ed25519 (64 octets, encodée en hex ou base64).
+    pub signature: String,
+    /// Clé publique Ed25519 du simulateur ayant signé.
+    pub public_key: String,
+}

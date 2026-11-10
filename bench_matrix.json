@@ -1,0 +1,15 @@
+{
+  "total": 200,
+  "attacks": 100,
+  "legitimate": 100,
+  "true_positives": 100,
+  "true_negatives": 100,
+  "false_positives": 0,
+  "false_negatives": 0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1_score": 1.0,
+  "median_latency_us": 0,
+  "p95_latency_us": 2,
+  "missed": []
+}

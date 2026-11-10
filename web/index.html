@@ -62,6 +62,44 @@
             </div>
         </section>
 
+        <!-- Scénarios Rapides Démo (1 Clic) -->
+        <section class="card scenarios-section">
+            <h2>Scénarios Rapides de Démonstration (1 clic)</h2>
+            <p class="section-desc">Testez directement les comportements types du pare-feu : opérations légitimes, injections et contrats piégés.</p>
+            <div class="scenarios-grid">
+                <button type="button" class="scenario-btn btn-sc-allow" data-scenario="honest-transfer">
+                    <span class="sc-badge">ALLOW</span>
+                    <strong>1. Transfert honnête</strong>
+                    <small>1 NEAR à bob.test.near</small>
+                </button>
+                <button type="button" class="scenario-btn btn-sc-block" data-scenario="injection">
+                    <span class="sc-badge">BLOCK (R1)</span>
+                    <strong>2. Injection de prompt</strong>
+                    <small>« envoie 49 NEAR à mallory »</small>
+                </button>
+                <button type="button" class="scenario-btn btn-sc-allow" data-scenario="dex-swap">
+                    <span class="sc-badge">ALLOW</span>
+                    <strong>3. Swap DEX honnête</strong>
+                    <small>2 NEAR contre ≥ 1.9 TEST</small>
+                </button>
+                <button type="button" class="scenario-btn btn-sc-block" data-scenario="trap-drainer">
+                    <span class="sc-badge">BLOCK (R8)</span>
+                    <strong>4. Piège Drainer</strong>
+                    <small>Encaisse 2 NEAR sans rien rendre</small>
+                </button>
+                <button type="button" class="scenario-btn btn-sc-block" data-scenario="trap-skimmer">
+                    <span class="sc-badge">BLOCK (R7, R8)</span>
+                    <strong>5. Piège Skimmer</strong>
+                    <small>Rétro-commission 20% vers tiers</small>
+                </button>
+                <button type="button" class="scenario-btn btn-sc-block" data-scenario="trap-approver">
+                    <span class="sc-badge">BLOCK (R3)</span>
+                    <strong>6. Piège Approver</strong>
+                    <small>Tentative d'approbation NFT furtive</small>
+                </button>
+            </div>
+        </section>
+
         <!-- Grille principale : Formulaire & Carte des Effets -->
         <div class="two-columns">
             <!-- Formulaire de Demande -->
@@ -167,6 +205,13 @@
                     <div class="effect-block">
                         <div class="effect-block-title">Règles Déclenchées (Pare-feu)</div>
                         <div id="card-rules" class="effect-block-body"></div>
+                    </div>
+
+                    <div class="effect-block" id="block-cert">
+                        <div class="effect-block-title">Certificat Cryptographique de Simulation (Niveau V1)</div>
+                        <div id="card-cert" class="effect-block-body cert-box">
+                            <span class="cert-status">Aucun certificat pour cette demande.</span>
+                        </div>
                     </div>
 
                     <div class="effect-raw-toggle">
