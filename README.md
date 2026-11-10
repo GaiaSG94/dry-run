@@ -238,11 +238,17 @@ dry-run/
 
 ## 8. Interface Web & Serveur HTTP
 
-Pour lancer l'interface visuelle locale (utilisée dans la vidéo de démonstration) :
+Le serveur web tourne en local et écoute sur toutes les interfaces (`0.0.0.0:8787`).
+
+- **Depuis cette machine** : [http://localhost:8787](http://localhost:8787)
+- **Depuis le réseau tailnet** : [http://100.124.18.48:8787/](http://100.124.18.48:8787/)
+
+Pour relancer le serveur :
 
 ```bash
-cargo run -p dryrun-gate -- serve --port 8787
-# Ouvrir http://localhost:8787
+cargo run --release -p dryrun-gate -- serve --port 8787
+# ou simplement :
+./run-server.sh
 ```
 
 Fonctionnalités de l'interface :
