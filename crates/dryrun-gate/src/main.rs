@@ -225,8 +225,9 @@ fn show_log(gate: &Gatekeeper) -> anyhow::Result<()> {
 /// Démarre le serveur HTTP de la page web.
 async fn serve(gate: Gatekeeper, port: u16, web_dir: String) -> anyhow::Result<()> {
     let web_dir = resolve_web_dir(&web_dir);
+    println!("interface web accessible sur http://0.0.0.0:{port}/");
     let server = Arc::new(HttpServer::new(Arc::new(gate), web_dir));
-    server.run(&format!("127.0.0.1:{port}")).await
+    server.run(&format!("0.0.0.0:{port}")).await
 }
 
 /// Trouve le dossier `web/` que l'on soit à la racine ou dans un crate.
@@ -235,7 +236,11 @@ fn resolve_web_dir(requested: &str) -> std::path::PathBuf {
     if candidate.is_dir() {
         return candidate;
     }
-    for fallback in ["../../web", "../web", "web"] {
+    for fallback in [
+        "web",
+        "../../web",
+        "../web",
+    ] {
         let path = std::path::PathBuf::from(fallback);
         if path.is_dir() {
             return path;

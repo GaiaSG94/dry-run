@@ -185,7 +185,8 @@ impl HttpServer {
             }
             ("POST", "/api/propose") => self.api_propose(&mut stream, &body).await,
             ("POST", "/api/freeze") => self.api_freeze(&mut stream).await,
-            ("GET", _) => self.serve_static(&mut stream, &path).await,
+            ("GET", _) => self.serve_static(&mut stream, &path, true).await,
+            ("HEAD", _) => self.serve_static(&mut stream, &path, false).await,
             _ => send_error(&mut stream, 404, "route introuvable").await,
         }
     }
@@ -219,7 +220,12 @@ impl HttpServer {
     }
 
     /// Sert un fichier de `web/` (`index.html` par défaut pour `/`).
-    async fn serve_static(&self, stream: &mut TcpStream, path: &str) -> anyhow::Result<()> {
+    async fn serve_static(
+        &self,
+        stream: &mut TcpStream,
+        path: &str,
+        send_body: bool,
+    ) -> anyhow::Result<()> {
         let relative = if path == "/" || path.is_empty() {
             "index.html"
         } else {
@@ -233,7 +239,18 @@ impl HttpServer {
         match tokio::fs::read(&file_path).await {
             Ok(content) => {
                 let mime = mime_for_path(&file_path);
-                write_response(stream, 200, "OK", mime, &content).await
+                if send_body {
+                    write_response(stream, 200, "OK", mime, &content).await
+                } else {
+                    let header = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\n\
+                         Content-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+                        content.len()
+                    );
+                    stream.write_all(header.as_bytes()).await?;
+                    stream.flush().await?;
+                    Ok(())
+                }
             }
             Err(_) => send_error(stream, 404, "fichier introuvable").await,
         }
