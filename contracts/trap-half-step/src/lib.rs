@@ -120,7 +120,9 @@ mod tests {
         );
         // Aucun reçu vers le coffre : rien n'est rendu, les fonds restent coincés.
         assert!(
-            receipts.iter().all(|r| r.receiver_id != id("vault.test.near")),
+            receipts
+                .iter()
+                .all(|r| r.receiver_id != id("vault.test.near")),
             "aucun remboursement ne doit etre cree"
         );
     }

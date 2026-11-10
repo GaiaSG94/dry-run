@@ -35,3 +35,5 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests unitaires (sans bac à sable)
         run: cargo test --workspace --lib --bins
+      - name: Build WASM des contrats
+        run: cargo build --target wasm32-unknown-unknown --release -p vault -p good-dex -p test-token -p test-nft -p trap-drainer -p trap-skimmer -p trap-half-step -p trap-liar -p trap-approver -p trap-shapeshifter

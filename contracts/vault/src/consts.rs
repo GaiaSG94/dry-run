@@ -43,5 +43,7 @@ pub const LOG_CAPACITY: usize = 100;
 pub const MAX_TRACKED_KEYS: usize = 8;
 /// Gas statique du rappel `on_done`, en Tgas.
 pub const CALLBACK_GAS_TGAS: u64 = 10;
+/// Taille maximale du résultat lu par `on_done` : au-delà, l'appel est jugé en échec.
+pub const CALLBACK_RESULT_MAX: usize = 1_024;
 /// Dépôt exigé par les actions du propriétaire : 1 yoctoNEAR.
 pub const ONE_YOCTO: u128 = 1;

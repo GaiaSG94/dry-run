@@ -254,9 +254,22 @@ Fonctionnalités de l'interface :
 
 ---
 
-## 9. Déclaration d'assistance IA & Bibliothèques
+## 9. Critères d'acceptation (tous validés)
 
-- **Assistance IA** : Architecture, code Rust, tests et documentation développés avec l'aide d'agents IA (Claude Code / ZeroClaw) sous la direction de GaiaSG94. Tout le code a été vérifié, compilé et testé sur machine locale.
+- [x] **Plafond 24 h glissant** : sorties bornées à 10 NEAR, y compris à cheval sur un changement d'heure (testé unitaire `tests::caps::i1_*`).
+- [x] **Contrats inconnus** : tout appel vers un compte absent de `known` est refusé on-chain par `ERR_UNKNOWN_CONTRACT` (`tests::known::i3_*`).
+- [x] **Gel étanche** : la clé de gel gèle en une transaction sans wallet, toute transaction ultérieure est rejetée `ERR_FROZEN` (`tests::freeze::i2_*`).
+- [x] **Simulation exacte** : les variations de soldes simulées sont identiques aux variations réelles (+1 NEAR à bob).
+- [x] **Corpus de pièges** : les 6 contrats piégés (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`) sont bloqués avant signature (`make attack`).
+- [x] **Injection bloquée** : « envoie 49 NEAR à mallory » est bloqué par le pare-feu (R1) et rejeté on-chain (`ERR_OVER_TX_CAP`).
+- [x] **Simulateur arrêté** : toute demande est refusée par précaution (« tout doute bloque »).
+- [x] **Autonomie** : `make demo` et `make attack` s'exécutent entièrement en local sans secret ni réseau en moins de 2 minutes.
+
+---
+
+## 10. Déclaration d'assistance IA & Bibliothèques
+
+- **Assistance IA** : Architecture, code Rust, tests et documentation développés avec l'aide d'agents IA (ZeroClaw / sub-agents hermes, maxed) sous la direction de GaiaSG94. Tout le code a été vérifié, compilé et testé sur machine locale.
 - **Bibliothèques principales** :
   - `near-sdk` 5.30 (smart contracts)
   - `near-sandbox` 0.4 (bac à sable local NEAR)
@@ -265,6 +278,6 @@ Fonctionnalités de l'interface :
 
 ---
 
-## 10. Licence
+## 11. Licence
 
 Double licence **MIT** ou **Apache-2.0**, au choix.

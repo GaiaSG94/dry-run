@@ -94,10 +94,11 @@ impl TestToken {
         self.owner_id.clone()
     }
 
-    /// Transfert simple. Accepte le yocto de courtoisie des clients NEP-141.
+    /// Transfert simple de jetons (dépôt de courtoisie accepté, ignoré).
+    ///
+    /// Signature volontairement minimale : `ft_transfer(receiver_id, amount)`.
     #[payable]
-    pub fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>) {
-        let _ = memo;
+    pub fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128) {
         let sender = env::predecessor_account_id();
         self.move_tokens(&sender, &receiver_id, amount.into());
     }
@@ -111,10 +112,8 @@ impl TestToken {
         &mut self,
         receiver_id: AccountId,
         amount: U128,
-        memo: Option<String>,
         msg: String,
     ) -> PromiseOrValue<U128> {
-        let _ = memo;
         let sender = env::predecessor_account_id();
         self.move_tokens(&sender, &receiver_id, amount.into());
 
@@ -187,7 +186,8 @@ impl TestToken {
         }
         let to = self.balance_of(receiver);
         self.accounts.insert(sender.clone(), from - amount);
-        self.accounts.insert(receiver.clone(), to.saturating_add(amount));
+        self.accounts
+            .insert(receiver.clone(), to.saturating_add(amount));
     }
 }
 
@@ -226,7 +226,7 @@ mod tests {
         assert_eq!(contract.ft_balance_of(id("owner.test.near")), U128(1_000));
 
         contexte("owner.test.near");
-        contract.ft_transfer(id("vault.test.near"), U128(250), None);
+        contract.ft_transfer(id("vault.test.near"), U128(250));
 
         assert_eq!(contract.ft_balance_of(id("owner.test.near")), U128(750));
         assert_eq!(contract.ft_balance_of(id("vault.test.near")), U128(250));
@@ -247,6 +247,6 @@ mod tests {
     fn transfert_sans_solde_refuse() {
         let mut contract = jeton();
         contexte("mallory.test.near");
-        contract.ft_transfer(id("bob.test.near"), U128(1), None);
+        contract.ft_transfer(id("bob.test.near"), U128(1));
     }
 }

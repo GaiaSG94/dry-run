@@ -42,8 +42,14 @@ impl Simulator {
     /// Démarre le faux coffre ; `_wasm_dir` est ignoré.
     pub async fn start(_wasm_dir: &Path) -> anyhow::Result<Self> {
         let mut known = BTreeMap::new();
-        known.insert("good-dex.test.near".to_string(), "hash_good_dex".to_string());
-        known.insert("test-token.test.near".to_string(), "hash_test_token".to_string());
+        known.insert(
+            "good-dex.test.near".to_string(),
+            "hash_good_dex".to_string(),
+        );
+        known.insert(
+            "test-token.test.near".to_string(),
+            "hash_test_token".to_string(),
+        );
 
         Ok(Self {
             state: RwLock::new(State {
@@ -59,8 +65,16 @@ impl Simulator {
     /// Déploie les contrats de démonstration (bouchon : noms seulement).
     pub async fn deploy_all(&self) -> anyhow::Result<Deployed> {
         let names = [
-            "vault", "good-dex", "test-token", "test-nft", "drainer", "skimmer",
-            "half-step", "liar", "approver", "shapeshifter",
+            "vault",
+            "good-dex",
+            "test-token",
+            "test-nft",
+            "drainer",
+            "skimmer",
+            "half-step",
+            "liar",
+            "approver",
+            "shapeshifter",
         ];
         let mut contracts = BTreeMap::new();
         for name in names {
@@ -115,6 +129,7 @@ impl Simulator {
             is_frozen: state.frozen,
             owner: OWNER.to_string(),
             known_contracts: state.known.clone(),
+            backend: "stub".to_string(),
         })
     }
 

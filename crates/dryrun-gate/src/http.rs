@@ -59,9 +59,7 @@ impl IntentInput {
                 .into_iter()
                 .map(|(token, amount)| (token, amount.yocto()))
                 .collect(),
-            max_out: self
-                .max_out
-                .map(|(token, amount)| (token, amount.yocto())),
+            max_out: self.max_out.map(|(token, amount)| (token, amount.yocto())),
         }
     }
 }
@@ -307,7 +305,14 @@ async fn send_json<T: serde::Serialize>(
     data: &T,
 ) -> anyhow::Result<()> {
     let body = serde_json::to_vec(data)?;
-    write_response(stream, status, reason, "application/json; charset=utf-8", &body).await
+    write_response(
+        stream,
+        status,
+        reason,
+        "application/json; charset=utf-8",
+        &body,
+    )
+    .await
 }
 
 /// Écrit une réponse d'erreur JSON normalisée.

@@ -33,6 +33,9 @@ pub struct VaultStatus {
     pub owner: String,
     /// Contrats connus : compte → empreinte du code à l'accord.
     pub known_contracts: BTreeMap<String, String>,
+    /// Simulateur actif : `dryrun-sim` ou `stub`.
+    #[serde(default)]
+    pub backend: String,
 }
 
 /// Résultat d'une exécution réelle sur la chaîne.

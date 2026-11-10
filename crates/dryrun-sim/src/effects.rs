@@ -6,10 +6,12 @@ use anyhow::{Context, Result};
 use near_primitives::types::AccountId;
 use serde_json::Value;
 
-use dryrun_core::{AccountSnap, CodeEvent, Effects, FtDelta, KeyEvent, NearDelta, NftEvent, ReceiptInfo, Snapshot};
+use dryrun_core::{
+    AccountSnap, CodeEvent, Effects, FtDelta, KeyEvent, NearDelta, NftEvent, ReceiptInfo, Snapshot,
+};
 
 use crate::accounts;
-use crate::rpc::{b64, unb64, Rpc};
+use crate::rpc::Rpc;
 
 /// Coût de stockage par octet (yoctoNEAR), valeur du protocole NEAR.
 pub const STORAGE_PRICE_PER_BYTE: u128 = 10u128.pow(19);
@@ -66,6 +68,17 @@ impl SnapshotSet {
     }
 }
 
+/// Une demande refusée par le réseau **avant** toute exécution.
+///
+/// Aucun fonds n'a bougé, mais l'agent demandait bien cette sortie : le
+/// pare-feu doit juger l'intention, jamais « rien ne s'est passé donc c'est
+/// sûr » (absence de preuve n'est pas preuve d'innocuité).
+#[derive(Clone, Debug)]
+pub struct RejectedAttempt {
+    /// Montant que la demande voulait faire sortir, en yoctoNEAR.
+    pub amount: u128,
+}
+
 /// Résultat d'exécution servant à remplir les champs non étatiques.
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionInfo {
@@ -76,23 +89,25 @@ pub struct ExecutionInfo {
 }
 
 /// Lit l'état des comptes surveillés dans un bac à sable.
-pub async fn snapshot(
-    rpc: &Rpc,
-    watched: &[String],
-    token: Option<&str>,
-) -> Result<SnapshotSet> {
+pub async fn snapshot(rpc: &Rpc, watched: &[String], token: Option<&str>) -> Result<SnapshotSet> {
     let height = rpc.height().await?;
     let block_hash = rpc.block_hash().await?.to_string();
     let mut accounts = Vec::with_capacity(watched.len());
     for name in watched {
         accounts.push(account_snapshot(rpc, name, token).await?);
     }
-    Ok(SnapshotSet { height, block_hash, accounts })
+    Ok(SnapshotSet {
+        height,
+        block_hash,
+        accounts,
+    })
 }
 
 /// Lit un compte : solde, code, clés, jetons.
 async fn account_snapshot(rpc: &Rpc, name: &str, token: Option<&str>) -> Result<AccountSnapshot> {
-    let account: AccountId = name.parse().with_context(|| format!("compte invalide : {name}"))?;
+    let account: AccountId = name
+        .parse()
+        .with_context(|| format!("compte invalide : {name}"))?;
     let info = rpc.account(&account).await?;
     let keys = rpc
         .access_keys(&account)
@@ -100,7 +115,7 @@ async fn account_snapshot(rpc: &Rpc, name: &str, token: Option<&str>) -> Result<
         .iter()
         .map(|key| KeyDesc {
             public_key: key.public_key.to_string(),
-            scope: crate::chain::scope_of_public(&key.access_key.permission),
+            scope: crate::util::scope_of(&key.access_key.permission),
         })
         .collect();
     let ft = match (token, info.as_ref()) {
@@ -110,7 +125,10 @@ async fn account_snapshot(rpc: &Rpc, name: &str, token: Option<&str>) -> Result<
     Ok(AccountSnapshot {
         account: name.to_string(),
         balance: info.as_ref().map(|i| i.amount.as_yoctonear()).unwrap_or(0),
-        code_hash: info.as_ref().map(|i| i.code_hash.clone()).unwrap_or_default(),
+        code_hash: info
+            .as_ref()
+            .map(|i| i.code_hash.clone())
+            .unwrap_or_default(),
         storage_usage: info.as_ref().map(|i| i.storage_usage).unwrap_or(0),
         keys,
         ft: match token {
@@ -124,13 +142,17 @@ async fn account_snapshot(rpc: &Rpc, name: &str, token: Option<&str>) -> Result<
 async fn ft_balance(rpc: &Rpc, token: &str, account: &str) -> Result<u128> {
     let token_id: AccountId = token.parse()?;
     let value: Value = match rpc
-        .view_call(&token_id, "ft_balance_of", &serde_json::json!({"account_id": account}))
+        .view_call(
+            &token_id,
+            "ft_balance_of",
+            &serde_json::json!({"account_id": account}),
+        )
         .await
     {
         Ok(value) => value,
         Err(_) => return Ok(0),
     };
-    Ok(crate::chain::amount_of(&value).unwrap_or(0))
+    Ok(crate::util::amount_of(&value).unwrap_or(0))
 }
 
 /// Construit les `Effects` à partir des deux états et du résultat d'exécution.
@@ -140,19 +162,54 @@ pub fn effects(
     exec: &ExecutionInfo,
     vault: &str,
     ignored_keys: &[String],
+    rejected: Option<&RejectedAttempt>,
 ) -> Effects {
+    let mut near_delta = near_deltas(before, after);
+    if let Some(attempt) = rejected {
+        push_outflow(&mut near_delta, vault, attempt.amount);
+    }
     Effects {
         snapshot: build_snapshot(after),
-        near_delta: near_deltas(before, after),
+        near_delta,
         ft_delta: ft_deltas(before, after),
         nft: nft_events(&exec.receipts),
         keys: key_events(before, after, ignored_keys),
         code: code_events(before, after),
-        receipts: exec.receipts.clone(),
-        stranded: is_stranded(before, after, &exec.receipts),
+        receipts: receipts_of(exec, vault, rejected),
+        // Une transaction refusée avant exécution ne peut pas être « stranded » :
+        // aucun reçu n'a échoué *après* une sortie réelle.
+        stranded: rejected.is_none() && is_stranded(before, after, &exec.receipts),
         gas_burnt: exec.gas_burnt,
         storage_delta: storage_delta(before, after, vault),
     }
+}
+
+/// Ajoute (ou cumule) la sortie demandée au compte du coffre.
+fn push_outflow(deltas: &mut Vec<NearDelta>, vault: &str, amount: u128) {
+    match deltas.iter_mut().find(|delta| delta.account == vault) {
+        Some(existing) => existing.delta -= amount as i128,
+        None => deltas.push(NearDelta {
+            account: vault.to_string(),
+            delta: -(amount as i128),
+        }),
+    }
+}
+
+/// Reçus observés ; un reçu d'échec explicite si la transaction a été refusée.
+fn receipts_of(
+    exec: &ExecutionInfo,
+    vault: &str,
+    rejected: Option<&RejectedAttempt>,
+) -> Vec<ReceiptInfo> {
+    if rejected.is_none() || !exec.receipts.is_empty() {
+        return exec.receipts.clone();
+    }
+    vec![ReceiptInfo {
+        id: "tx-refusee".to_string(),
+        status: "failed".to_string(),
+        receiver: vault.to_string(),
+        logs: Vec::new(),
+    }]
 }
 
 /// Instantané lisible de l'état final.
@@ -177,7 +234,10 @@ fn near_deltas(before: &SnapshotSet, after: &SnapshotSet) -> Vec<NearDelta> {
         .accounts
         .iter()
         .map(|snap| {
-            let previous = before.get(&snap.account).map(|old| old.balance).unwrap_or(0);
+            let previous = before
+                .get(&snap.account)
+                .map(|old| old.balance)
+                .unwrap_or(0);
             NearDelta {
                 account: snap.account.clone(),
                 delta: snap.balance as i128 - previous as i128,
@@ -212,19 +272,28 @@ fn key_events(before: &SnapshotSet, after: &SnapshotSet, ignored: &[String]) -> 
     let mut out = Vec::new();
     for snap in &after.accounts {
         let empty = BTreeMap::new();
-        let birth = before.get(&snap.account).map(|old| old.key_set()).unwrap_or(empty);
+        let birth = before
+            .get(&snap.account)
+            .map(|old| old.key_set())
+            .unwrap_or(empty);
         let death = snap.key_set();
         for (key, scope) in &death {
             if ignored.contains(key) || birth.contains_key(key) {
                 continue;
             }
-            out.push(KeyEvent::Added { account: snap.account.clone(), scope: scope.clone() });
+            out.push(KeyEvent::Added {
+                account: snap.account.clone(),
+                scope: scope.clone(),
+            });
         }
         for (key, scope) in &birth {
             if ignored.contains(key) || death.contains_key(key) {
                 continue;
             }
-            out.push(KeyEvent::Removed { account: snap.account.clone(), scope: scope.clone() });
+            out.push(KeyEvent::Removed {
+                account: snap.account.clone(),
+                scope: scope.clone(),
+            });
         }
     }
     out
@@ -234,33 +303,53 @@ fn key_events(before: &SnapshotSet, after: &SnapshotSet, ignored: &[String]) -> 
 fn code_events(before: &SnapshotSet, after: &SnapshotSet) -> Vec<CodeEvent> {
     let mut out = Vec::new();
     for snap in &after.accounts {
-        let previous = before.get(&snap.account).map(|old| old.code_hash.clone()).unwrap_or_default();
+        let previous = before
+            .get(&snap.account)
+            .map(|old| old.code_hash.clone())
+            .unwrap_or_default();
         if snap.code_hash == previous || snap.code_hash.is_empty() {
             continue;
         }
         if previous.is_empty() {
-            out.push(CodeEvent::Deployed { account: snap.account.clone() });
+            out.push(CodeEvent::Deployed {
+                account: snap.account.clone(),
+            });
         } else {
-            out.push(CodeEvent::Changed { account: snap.account.clone() });
+            out.push(CodeEvent::Changed {
+                account: snap.account.clone(),
+            });
         }
     }
     out
 }
 
 /// Vrai si un reçu a échoué alors que des fonds étaient déjà sortis.
-fn is_stranded(before: &SnapshotSet, after: &SnapshotSet, receipts: &[ReceiptInfo]) -> bool {
+///
+/// On ne compte pas le simple `delta < 0` du coffre : les frais de gas en font
+/// toujours partie. Un « stranded » suppose qu'un **tiers** a effectivement
+/// gagné des fonds pendant qu'un autre reçu échouait (typiquement `half-step`).
+fn is_stranded(_before: &SnapshotSet, _after: &SnapshotSet, receipts: &[ReceiptInfo]) -> bool {
     let failure = receipts.iter().any(|receipt| receipt.status == "failed");
     if !failure {
         return false;
     }
-    let outflow = near_deltas(before, after).iter().any(|delta| delta.delta < 0)
-        || ft_deltas(before, after).iter().any(|delta| delta.delta < 0);
-    outflow
+    let gained =
+        |account: &str| !accounts::FEE_ACCOUNTS.contains(&account) && account != accounts::VAULT;
+    let near_gain = near_deltas(_before, _after)
+        .iter()
+        .any(|delta| delta.delta > 0 && gained(&delta.account));
+    let ft_gain = ft_deltas(_before, _after)
+        .iter()
+        .any(|delta| delta.delta > 0);
+    near_gain || ft_gain
 }
 
 /// Coût du stockage gagné par le coffre pendant la transaction, en yoctoNEAR.
 fn storage_delta(before: &SnapshotSet, after: &SnapshotSet, vault: &str) -> u128 {
-    let previous = before.get(vault).map(|snap| snap.storage_usage).unwrap_or(0);
+    let previous = before
+        .get(vault)
+        .map(|snap| snap.storage_usage)
+        .unwrap_or(0);
     let current = after.get(vault).map(|snap| snap.storage_usage).unwrap_or(0);
     current.saturating_sub(previous) as u128 * STORAGE_PRICE_PER_BYTE
 }
@@ -281,14 +370,16 @@ fn events_in_log(log: &str, collection: &str) -> Vec<NftEvent> {
     if let Some(rest) = log.strip_prefix("EVENT_JSON:") {
         return nep297(rest, collection);
     }
-    let token = field_after(log, "token_id");
-    let to = field_after(log, "to").or_else(|| field_after(log, "new_owner_id"));
+    let token = field_after(log, "token_id").unwrap_or_default();
+    let to = field_after(log, "to")
+        .or_else(|| field_after(log, "new_owner_id"))
+        .unwrap_or_default();
     let mut out = Vec::new();
     if log.contains("nft_approve") {
         out.push(NftEvent::Approve {
             collection: collection.to_string(),
-            token: token.clone(),
-            to: to.clone(),
+            token,
+            to,
         });
     } else if log.contains("nft_transfer") {
         out.push(NftEvent::Transfer {
@@ -308,9 +399,16 @@ fn nep297(json: &str, collection: &str) -> Vec<NftEvent> {
     if value.get("standard").and_then(Value::as_str) != Some("nep171") {
         return Vec::new();
     }
-    let event = value.get("event").and_then(Value::as_str).unwrap_or_default();
+    let event = value
+        .get("event")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let mut out = Vec::new();
-    let data = value.get("data").and_then(Value::as_array).cloned().unwrap_or_default();
+    let data = value
+        .get("data")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
     for item in data {
         let token = item
             .get("token_ids")
@@ -340,32 +438,28 @@ fn nep297(json: &str, collection: &str) -> Vec<NftEvent> {
     out
 }
 
-/// Cherche `clé: "valeur"` ou `clé:valeur` dans un journal libre.
+/// Cherche `clé: valeur`, `clé=valeur` ou `clé "valeur"` dans un journal libre.
+///
+/// On exige un séparateur après la clé : sans cela, `to` trouverait le `to`
+/// de `token_id`.
 fn field_after(log: &str, key: &str) -> Option<String> {
-    let start = log.find(key)? + key.len();
-    let rest = log[start..].trim_start_matches([':', '=', ' ', '"']);
-    let value: String = rest
-        .chars()
-        .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
-        .collect();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
+    for separator in [':', '=', ' '] {
+        let pattern = format!("{key}{separator}");
+        if let Some(position) = log.find(&pattern) {
+            let rest = log[position + pattern.len()..].trim_start_matches(['"', ' ']);
+            let value: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
+                .collect();
+            if !value.is_empty() {
+                return Some(value);
+            }
+        }
     }
+    None
 }
 
 /// Tokens de la démo qu'on relit avant/après (sert à alimenter `ft_delta`).
 pub fn watched_token() -> &'static str {
     accounts::TEST_TOKEN
-}
-
-/// Encode les octets d'un reçu sous forme lisible (utile aux tests et au débogage).
-pub fn log_blob(bytes: &[u8]) -> String {
-    b64(bytes)
-}
-
-/// Décode un champ base64 d'une réponse RPC.
-pub fn decode_blob(text: &str) -> Result<Vec<u8>> {
-    unb64(text)
 }

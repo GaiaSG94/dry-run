@@ -43,9 +43,7 @@ fn balances(eff: &Effects) -> String {
         }
         out.push_str(&format!(
             "   {:<40} {:>+} {}\n",
-            d.account,
-            d.delta,
-            d.token
+            d.account, d.delta, d.token
         ));
     }
     if out.lines().count() == 1 {
@@ -78,11 +76,7 @@ fn receipts(eff: &Effects) -> String {
         return out;
     }
     let failed = eff.receipts.iter().filter(|r| r.status == "failed").count();
-    out.push_str(&format!(
-        "   {}, {} échec(s)\n",
-        eff.receipts.len(),
-        failed
-    ));
+    out.push_str(&format!("   {}, {} échec(s)\n", eff.receipts.len(), failed));
     out
 }
 
@@ -133,7 +127,11 @@ pub fn one_line(decision: &Decision, intent: &Intent) -> String {
         "{} — {} — {}",
         {
             let s = intent.summary.trim();
-            if s.is_empty() { "opération".to_string() } else { s.to_string() }
+            if s.is_empty() {
+                "opération".to_string()
+            } else {
+                s.to_string()
+            }
         },
         decision.verdict.as_str(),
         decision

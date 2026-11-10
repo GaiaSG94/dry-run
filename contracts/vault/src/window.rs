@@ -8,8 +8,8 @@ use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 
 /// Nombre de cases horaires : la fenêtre fait 24 heures.
 pub const SLOTS: usize = 24;
-/// Durée d'une heure en nanosecondes.
-pub const HOUR_NS: u64 = 3_600_000_000;
+/// Durée d'une heure en nanosecondes (les dates de bloc sont en nanosecondes).
+pub const HOUR_NS: u64 = 3_600_000_000_000;
 
 /// Dépenses horaires des dernières 24 heures.
 #[derive(Clone, Debug, Default, BorshSerialize, BorshDeserialize)]

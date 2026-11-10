@@ -9,16 +9,28 @@ use std::sync::Arc;
 
 use dryrun_core::types::{Demande, Intent, Verdict};
 use dryrun_gate::cli::{self, Command};
+use dryrun_gate::demo;
 use dryrun_gate::gate::{Gatekeeper, Outcome};
 use dryrun_gate::http::HttpServer;
-use dryrun_gate::VaultStatus;
+use dryrun_gate::{Simulator, VaultStatus};
 
 /// Dossier des wasm compilés, relatif à la racine du dépôt.
-const DEFAULT_WASM_DIR: &str = "contracts/target/wasm32-unknown-unknown/release";
+const DEFAULT_WASM_DIR: &str = "target/wasm32-unknown-unknown/release";
+
+/// Choix du simulateur, réglable par `--sim auto|real|stub`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SimChoice {
+    /// Vrai simulateur, avec repli sur le bouchon s'il ne démarre pas.
+    Auto,
+    /// Vrai simulateur, sans repli.
+    Real,
+    /// Bouchon en mémoire (démonstration hors chaîne, tests).
+    Stub,
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let (args, sim_choice) = extract_sim_choice(std::env::args().skip(1).collect());
     let command = match cli::parse(&args) {
         Ok(cmd) => cmd,
         Err(err) => {
@@ -30,14 +42,43 @@ async fn main() -> anyhow::Result<()> {
 
     match command {
         Command::Help => print_help(),
-        other => run(other).await?,
+        other => run(other, sim_choice).await?,
     }
     Ok(())
 }
 
+/// Retire l'option globale `--sim <mode>` des arguments.
+fn extract_sim_choice(args: Vec<String>) -> (Vec<String>, SimChoice) {
+    let mut kept = Vec::new();
+    let mut choice = SimChoice::Auto;
+    let mut index = 0;
+    while index < args.len() {
+        if args[index] == "--sim" {
+            choice = match args.get(index + 1).map(String::as_str) {
+                Some("stub") => SimChoice::Stub,
+                Some("real") => SimChoice::Real,
+                _ => SimChoice::Auto,
+            };
+            index += 2;
+            continue;
+        }
+        kept.push(args[index].clone());
+        index += 1;
+    }
+    (kept, choice)
+}
+
+/// Construit le garde-barrière selon le simulateur demandé.
+async fn open_gate(choice: SimChoice) -> anyhow::Result<Gatekeeper> {
+    match choice {
+        SimChoice::Stub => Ok(Gatekeeper::from_sim(Arc::new(Simulator::stub().await?))),
+        SimChoice::Real | SimChoice::Auto => Gatekeeper::start(Path::new(DEFAULT_WASM_DIR)).await,
+    }
+}
+
 /// Exécute une commande qui a besoin du garde-barrière.
-async fn run(command: Command) -> anyhow::Result<()> {
-    let gate = Gatekeeper::start(Path::new(DEFAULT_WASM_DIR)).await?;
+async fn run(command: Command, sim_choice: SimChoice) -> anyhow::Result<()> {
+    let gate = open_gate(sim_choice).await?;
     match command {
         Command::Propose { demand, intent } => propose(&gate, demand, intent).await,
         Command::Approve { contract } => approve(&gate, &contract).await,
@@ -48,6 +89,8 @@ async fn run(command: Command) -> anyhow::Result<()> {
         }
         Command::Status => status(&gate).await,
         Command::Log => show_log(&gate),
+        Command::Demo => demo::run_demo(&gate).await,
+        Command::Attack => demo::run_attack(&gate).await,
         Command::Serve { port, web_dir } => serve(gate, port, web_dir).await,
         Command::Help => Ok(()),
     }
@@ -75,11 +118,7 @@ async fn propose(gate: &Gatekeeper, demand: Demande, intent: Intent) -> anyhow::
 }
 
 /// Demande confirmation au propriétaire, puis exécute si accepté.
-async fn confirm_warn(
-    gate: &Gatekeeper,
-    demand: &Demande,
-    intent: &Intent,
-) -> anyhow::Result<()> {
+async fn confirm_warn(gate: &Gatekeeper, demand: &Demande, intent: &Intent) -> anyhow::Result<()> {
     if !ask_yes_no("Confirmer malgré l'avertissement ? [yes/no] ") {
         println!("Refusé par le propriétaire : rien n'a été signé.");
         return Ok(());
@@ -133,7 +172,10 @@ fn ask_yes_no(question: &str) -> bool {
     if std::io::stdin().read_line(&mut answer).is_err() {
         return false;
     }
-    matches!(answer.trim().to_lowercase().as_str(), "yes" | "y" | "oui" | "o")
+    matches!(
+        answer.trim().to_lowercase().as_str(),
+        "yes" | "y" | "oui" | "o"
+    )
 }
 
 /// `approve <contrat>` : réservé au propriétaire, jamais à l'agent.
@@ -151,7 +193,11 @@ async fn status(gate: &Gatekeeper) -> anyhow::Result<()> {
     println!("plafond tx   : {} NEAR", st.tx_cap.near());
     println!("plafond 24 h : {} NEAR", st.daily_cap.near());
     println!("dépensé 24 h : {} NEAR", st.spent_24h.near());
-    println!("état         : {}", if st.is_frozen { "GELÉ" } else { "ouvert" });
+    println!(
+        "état         : {}",
+        if st.is_frozen { "GELÉ" } else { "ouvert" }
+    );
+    println!("simulateur   : {}", st.backend);
     println!("propriétaire : {}", st.owner);
     println!("contrats     : {} connu(s)", st.known_contracts.len());
     Ok(())
@@ -211,4 +257,7 @@ fn print_help() {
     println!("  dryrun-gate status");
     println!("  dryrun-gate log");
     println!("  dryrun-gate serve [--port 8787] [--web-dir web]");
+    println!();
+    println!("Option globale : --sim auto|real|stub (défaut : auto).");
+    println!("`stub` joue la démonstration sur un coffre en mémoire, sans bac à sable.");
 }

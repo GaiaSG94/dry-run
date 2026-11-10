@@ -29,6 +29,11 @@ test:
 	@echo "==> Exécution de la suite de tests..."
 	@$(CARGO) test --workspace
 
+lint:
+	@echo "==> Vérification format et clippy..."
+	@cargo fmt --all --check
+	@$(CARGO) clippy --workspace --all-targets -- -D warnings
+
 demo: build
 	@echo "==> Lancement de la démonstration Dry Run..."
 	@$(CARGO) run --release -p dryrun-gate -- demo

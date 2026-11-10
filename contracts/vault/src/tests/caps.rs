@@ -74,7 +74,10 @@ fn i1_refused_action_leaves_the_window_untouched() {
     let mut fx = Fixture::agent(10 * ONE_NEAR, 4 * ONE_NEAR);
     assert_accepted(run(&mut fx, transfer(BOB, 3 * ONE_NEAR)));
     for _ in 0..3 {
-        assert_refused(run(&mut fx, transfer(BOB, 2 * ONE_NEAR)), ERR_OVER_DAILY_CAP);
+        assert_refused(
+            run(&mut fx, transfer(BOB, 2 * ONE_NEAR)),
+            ERR_OVER_DAILY_CAP,
+        );
     }
     assert_eq!(fx.vault.spent_24h().0, 3 * ONE_NEAR);
     assert_eq!(fx.vault.log(0, 100).len(), 1);

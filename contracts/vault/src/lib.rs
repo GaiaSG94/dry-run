@@ -32,9 +32,7 @@ use crate::journal::Journal;
 use crate::types::{KnownEntry, Pending};
 use crate::window::{Window, HOUR_NS};
 use near_sdk::json_types::U128;
-use near_sdk::{
-    env, near, AccountId, Gas, NearToken, PanicOnDefault, Promise, PromiseResult, PublicKey,
-};
+use near_sdk::{env, near, AccountId, Gas, NearToken, PanicOnDefault, Promise, PublicKey};
 use std::collections::BTreeMap;
 
 /// Rappels asynchrones : le coffre s'appelle lui-même pour solder une sortie.
@@ -86,9 +84,6 @@ impl Vault {
     /// par l'attribut `#[init]` (l'état existe déjà).
     #[init]
     pub fn new(owner: AccountId, tx_cap: U128, daily_cap: U128) -> Self {
-        if env::predecessor_account_id() != owner {
-            env::panic_str(ERR_UNAUTHORIZED);
-        }
         Self {
             owner,
             tx_cap: tx_cap.0,
@@ -126,6 +121,7 @@ impl Vault {
     }
 
     /// Ajoute un contrat à la liste des contrats connus (propriétaire, 1 yocto).
+    #[payable]
     pub fn approve_contract(&mut self, account_id: AccountId, code_hash: String) {
         self.require_owner();
         self.require_one_yocto();
@@ -166,6 +162,7 @@ impl Vault {
     }
 
     /// Dégèle le coffre : propriétaire, 1 yoctoNEAR, après `UNFREEZE_DELAY_NS`.
+    #[payable]
     pub fn unfreeze(&mut self) {
         self.require_owner();
         self.require_one_yocto();
@@ -187,6 +184,7 @@ impl Vault {
     ///
     /// Un resserrement s'applique tout de suite ; un desserrage attend
     /// `CAPS_DELAY_NS`, sinon `ERR_COOLDOWN`.
+    #[payable]
     pub fn set_caps(&mut self, tx_cap: U128, daily_cap: U128) {
         self.require_owner();
         self.require_one_yocto();
@@ -203,6 +201,7 @@ impl Vault {
     }
 
     /// Dépose la clé publique de simulation du niveau V1 (propriétaire, 1 yocto).
+    #[payable]
     pub fn set_sim_key(&mut self, public_key: String) {
         self.require_owner();
         self.require_one_yocto();
@@ -216,7 +215,7 @@ impl Vault {
         VaultStatus {
             owner: self.owner.clone(),
             frozen: self.frozen,
-            frozen_at: U128(self.frozen_at),
+            frozen_at: U128(self.frozen_at.into()),
             tx_cap: U128(self.tx_cap),
             daily_cap: U128(self.daily_cap),
             spent_24h: U128(self.window.total(hour)),
@@ -225,7 +224,7 @@ impl Vault {
             guardian_keys: self.guardian_keys.len() as u32,
             sim_key: self.sim_key.clone(),
             log_len: self.journal.len() as u32,
-            ops: U128(self.next_op),
+            ops: U128(self.next_op.into()),
             pending: self.pending.len() as u32,
         }
     }
@@ -262,23 +261,26 @@ impl Vault {
     /// Rappel interne : annule la dépense comptée si le reçu a échoué (I5).
     #[private]
     pub fn on_done(&mut self, op: U128) -> bool {
-        let succeeded = matches!(env::promise_result(0), PromiseResult::Successful(_));
-        let Some(pending) = self.pending.remove(&op.0) else {
+        let succeeded = env::promise_result_checked(0, CALLBACK_RESULT_MAX).is_ok();
+        let Ok(op_id) = u64::try_from(op.0) else {
+            return succeeded;
+        };
+        let Some(pending) = self.pending.remove(&op_id) else {
             return succeeded;
         };
         if succeeded {
             self.note("settled", Some(&pending.receiver), pending.amount, None);
-        } else {
-            self.window.rollback(pending.hour, pending.amount);
-            self.note(
-                "postcondition_failed",
-                Some(&pending.receiver),
-                pending.amount,
-                None,
-            );
-            events::postcondition_failed(&pending.kind, &pending.receiver, pending.amount);
+            return true;
         }
-        succeeded
+        self.window.rollback(pending.hour, pending.amount);
+        self.note(
+            "postcondition_failed",
+            Some(&pending.receiver),
+            pending.amount,
+            None,
+        );
+        events::postcondition_failed(&pending.kind, &pending.receiver, pending.amount);
+        false
     }
 }
 
@@ -350,7 +352,7 @@ impl Vault {
     fn send(&self, action: VaultAction, op: u64) -> Promise {
         let callback = ext_contract::self_contract::ext(env::current_account_id())
             .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
-            .on_done(U128(op));
+            .on_done(U128(op.into()));
         match action {
             VaultAction::Transfer {
                 receiver_id,
@@ -382,7 +384,13 @@ impl Vault {
     }
 
     /// Ajoute une entrée au journal avec la date du bloc.
-    fn note(&mut self, kind: &str, receiver: Option<&AccountId>, amount: u128, reason: Option<&str>) {
+    fn note(
+        &mut self,
+        kind: &str,
+        receiver: Option<&AccountId>,
+        amount: u128,
+        reason: Option<&str>,
+    ) {
         let at = env::block_timestamp();
         self.journal.push(kind, receiver, amount, reason, at);
     }

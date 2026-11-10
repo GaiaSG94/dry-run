@@ -77,6 +77,11 @@ impl Fixture {
         self.context(MALLORY, 0)
     }
 
+    /// Appelant suivant : le propriétaire, mais sans les 1 yoctoNEAR requis.
+    pub fn as_owner_without_yocto(&mut self) -> &mut Self {
+        self.context(OWNER, 0)
+    }
+
     /// Place l'horloge du bloc à `at` nanosecondes.
     pub fn jump(&mut self, at: u64) -> &mut Self {
         self.at = at;
@@ -132,6 +137,24 @@ pub fn run(fx: &mut Fixture, action: VaultAction) -> Option<String> {
         let promise = fx.vault.execute(action);
         drop(promise);
     })
+}
+
+/// Vérifie qu'un appel est passé.
+pub fn assert_accepted(result: Option<String>) {
+    if let Some(message) = result {
+        panic!("l'appel aurait dû passer, il a été refusé : {message}");
+    }
+}
+
+/// Vérifie qu'un appel a été refusé avec le code attendu.
+pub fn assert_refused(result: Option<String>, code: &str) {
+    match result {
+        Some(message) => assert!(
+            message.contains(code),
+            "refus attendu {code}, refus obtenu : {message}"
+        ),
+        None => panic!("l'appel aurait dû être refusé ({code})"),
+    }
 }
 
 /// Lance un appel et rend le message de panique, ou `None` s'il est passé.

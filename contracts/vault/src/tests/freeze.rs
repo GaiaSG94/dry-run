@@ -2,6 +2,7 @@
 
 use crate::consts::{ERR_COOLDOWN, ERR_FROZEN};
 use crate::tests::setup::*;
+use crate::window::HOUR_NS;
 
 #[test]
 fn i2_frozen_vault_refuses_every_outflow() {
@@ -24,7 +25,7 @@ fn i2_guardian_key_can_freeze() {
     fx.as_agent().vault.freeze();
     assert!(fx.vault.status().frozen);
     assert_eq!(fx.vault.status().guardian_keys, 1);
-    assert_eq!(fx.vault.status().frozen_at.0, fx.at);
+    assert_eq!(fx.vault.status().frozen_at.0, u128::from(fx.at));
     assert_refused(run(&mut fx, transfer(BOB, ONE_NEAR)), ERR_FROZEN);
 }
 
@@ -53,11 +54,8 @@ fn i2_freeze_is_idempotent() {
     let mut fx = Fixture::agent(10 * ONE_NEAR, 10 * ONE_NEAR);
     fx.vault.freeze();
     let frozen_at = fx.vault.status().frozen_at.0;
-    fx.advance(HOUR_NS_LOCAL);
+    fx.advance(HOUR_NS);
     fx.vault.freeze();
     assert_eq!(fx.vault.status().frozen_at.0, frozen_at);
     assert_eq!(fx.vault.log(0, 100).len(), 1);
 }
-
-/// Une heure en nanosecondes (raccourci local pour la lisibilité).
-const HOUR_NS_LOCAL: u64 = 3_600_000_000_000;

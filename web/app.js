@@ -21,10 +21,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
 /** Convertit un montant NEAR décimal saisi en yoctoNEAR (chaîne décimale). */
 function toYocto(nearText) {
-    const [whole = "0", frac = ""] = String(nearText).trim().split(".");
+    const text = String(nearText).trim();
+    if (!/^\d*(\.\d*)?$/.test(text) || text === "" || text === ".") {
+        throw new Error(`montant NEAR invalide : « ${text} »`);
+    }
+    const [whole = "0", frac = ""] = text.split(".");
     const wholePart = BigInt(whole === "" ? "0" : whole);
     const fracPart = BigInt((frac + "0".repeat(24)).slice(0, 24));
     return (wholePart * YOCTO_PER_NEAR + fracPart).toString();
+}
+
+/** Lit un champ de montant et le convertit ; affiche une alerte si invalide. */
+function readAmount(fieldId) {
+    return readAmountText(document.getElementById(fieldId).value);
 }
 
 /** Formate des yoctoNEAR (chaîne ou nombre) en NEAR lisibles. */
@@ -61,6 +70,17 @@ async function fetchStatus() {
         document.getElementById("stat-daily-cap").textContent = formatYocto(data.daily_cap) + " NEAR";
         document.getElementById("stat-spent").textContent = formatYocto(data.spent_24h) + " NEAR";
         document.getElementById("stat-owner").textContent = data.owner;
+        document.getElementById("stat-sim").textContent = data.backend || "-";
+
+        const notice = document.getElementById("sim-notice");
+        if (data.backend === "stub") {
+            notice.textContent =
+                "Simulation hors chaîne : coffre en mémoire, aucun contrat NEAR n'est appelé. " +
+                "Lancez sans --sim stub (bac à sable near-sandbox) pour la démonstration réelle.";
+            notice.classList.remove("hidden");
+        } else {
+            notice.classList.add("hidden");
+        }
 
         const badge = document.getElementById("vault-badge");
         badge.textContent = data.is_frozen ? "GELÉ" : "OUVERT";
@@ -135,8 +155,9 @@ function initTransferForm() {
     document.getElementById("form-transfer").addEventListener("submit", async (event) => {
         event.preventDefault();
         const to = document.getElementById("tf-to").value.trim();
-        const amount = toYocto(document.getElementById("tf-amount").value);
         const summary = document.getElementById("tf-intent").value.trim();
+        const amount = readAmount("tf-amount");
+        if (amount === null) return;
         await propose({
             kind: "transfer",
             to,
@@ -151,8 +172,9 @@ function initCallForm() {
         event.preventDefault();
         const contract = document.getElementById("call-contract").value.trim();
         const method = document.getElementById("call-method").value.trim();
-        const deposit = toYocto(document.getElementById("call-deposit").value);
         const summary = document.getElementById("call-intent").value.trim();
+        const deposit = readAmount("call-deposit");
+        if (deposit === null) return;
         const beneficiary = document.getElementById("call-beneficiary").value.trim();
         const minInRaw = document.getElementById("call-min-in").value.trim();
 
@@ -162,7 +184,9 @@ function initCallForm() {
         const min_in = [];
         if (minInRaw.includes(":")) {
             const [token, amountText] = minInRaw.split(":");
-            min_in.push([token.trim(), toYocto(amountText)]);
+            const minAmount = readAmountText(amountText);
+            if (minAmount === null) return;
+            min_in.push([token.trim(), minAmount]);
         }
 
         await propose({
@@ -175,6 +199,16 @@ function initCallForm() {
             intent: { summary, beneficiaries: beneficiary ? [beneficiary] : [], min_in },
         });
     });
+}
+
+/** Convertit un texte de montant ; affiche une alerte si invalide. */
+function readAmountText(text) {
+    try {
+        return toYocto(text);
+    } catch (err) {
+        alert(err.message);
+        return null;
+    }
 }
 
 /** Lit les arguments JSON du formulaire d'appel ; `null` si invalides. */
@@ -230,6 +264,7 @@ function renderCard(outcome) {
         : '<span class="ko">rien signé</span>';
 
     renderBalances(view);
+    renderKeys(view);
     renderRules(view);
 
     const receipts = view.receipts;
@@ -264,6 +299,23 @@ function renderBalances(view) {
             <span class="${negative ? "delta-negative" : "delta-positive"}">
                 ${esc(isNear ? formatYocto(raw) + " NEAR" : raw + " " + move.token)}
             </span>`;
+        box.appendChild(row);
+    });
+}
+
+/** Affiche les clés et approbations observées pendant la simulation. */
+function renderKeys(view) {
+    const box = document.getElementById("card-keys");
+    const lines = view.keys || [];
+
+    box.innerHTML = "";
+    if (!lines.length) {
+        box.textContent = "aucune clé ajoutée, aucune approbation";
+        return;
+    }
+    lines.forEach((line) => {
+        const row = document.createElement("div");
+        row.textContent = "• " + line;
         box.appendChild(row);
     });
 }

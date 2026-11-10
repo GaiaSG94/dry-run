@@ -4,6 +4,7 @@ pub mod amount;
 pub mod backend;
 pub mod cardfmt;
 pub mod cli;
+pub mod demo;
 pub mod gate;
 pub mod http;
 pub mod journal;

@@ -18,13 +18,44 @@ pub struct Execution {
 impl Execution {
     /// Identifiants des codes d'erreur repérés dans le message d'échec.
     pub fn error_codes(&self) -> Vec<String> {
-        let Some(error) = &self.error else { return Vec::new() };
+        let Some(error) = &self.error else {
+            return Vec::new();
+        };
         error
             .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
             .filter(|word| word.starts_with("ERR_"))
             .map(|word| word.to_string())
             .collect()
     }
+
+    /// Code de refus explicite : événement NEP-297 `refused`, puis message d'erreur.
+    ///
+    /// Le contrat journalise `{"standard":"nep297","event":"refused","data":{"reason":"ERR_..."}}`
+    /// juste avant de paniquer : ces journaux survivent à l'échec du reçu, c'est
+    /// donc la source la plus fiable (les messages de panique, eux, dépendent du
+    /// profil de compilation).
+    pub fn refusal(&self) -> Option<String> {
+        for log in &self.logs {
+            if let Some(reason) = refusal_in_log(log) {
+                return Some(reason);
+            }
+        }
+        self.error_codes().into_iter().next()
+    }
+}
+
+/// Extrait `data.reason` d'un journal d'événement `refused`.
+fn refusal_in_log(log: &str) -> Option<String> {
+    let json = log.strip_prefix("EVENT_JSON:").unwrap_or(log);
+    if !json.contains("refused") {
+        return None;
+    }
+    let value: serde_json::Value = serde_json::from_str(json).ok()?;
+    let reason = value
+        .get("data")
+        .and_then(|data| data.get("reason"))
+        .and_then(|reason| reason.as_str())?;
+    reason.starts_with("ERR_").then(|| reason.to_string())
 }
 
 /// Résume une exécution finale.
@@ -61,7 +92,9 @@ pub fn parse(outcome: &FinalExecutionOutcomeView) -> Execution {
 fn status_name(status: &ExecutionStatusView) -> &'static str {
     match status {
         ExecutionStatusView::Failure(_) => "failed",
-        ExecutionStatusView::SuccessValue(_) | ExecutionStatusView::SuccessReceiptId(_) => "success",
+        ExecutionStatusView::SuccessValue(_) | ExecutionStatusView::SuccessReceiptId(_) => {
+            "success"
+        }
         ExecutionStatusView::Unknown => "unknown",
     }
 }

@@ -3,13 +3,11 @@
 use dryrun_core::types::{Demande, Intent, Yocto};
 
 /// Commande demandée à la CLI.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     /// Propose une demande au pare-feu.
-    Propose {
-        demand: Demande,
-        intent: Intent,
-    },
+    Propose { demand: Demande, intent: Intent },
     /// Approuve un contrat (action du propriétaire).
     Approve { contract: String },
     /// Gèle le coffre d'un geste.
@@ -18,11 +16,12 @@ pub enum Command {
     Status,
     /// Affiche la frise des demandes.
     Log,
+    /// Déroule la démonstration guidée du garde-barrière.
+    Demo,
+    /// Joue le corpus d'attaques et vérifie que tout est refusé.
+    Attack,
     /// Sert la page web et l'API JSON.
-    Serve {
-        port: u16,
-        web_dir: String,
-    },
+    Serve { port: u16, web_dir: String },
     /// Affiche l'aide.
     Help,
 }
@@ -174,6 +173,8 @@ pub fn parse(args: &[String]) -> anyhow::Result<Command> {
         Some("freeze") => Command::Freeze,
         Some("status") => Command::Status,
         Some("log") => Command::Log,
+        Some("demo") => Command::Demo,
+        Some("attack") => Command::Attack,
         Some("serve") => {
             let (port, web_dir) = parse_serve(&args[1..])?;
             Command::Serve { port, web_dir }

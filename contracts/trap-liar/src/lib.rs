@@ -85,7 +85,8 @@ mod tests {
         );
         let logs = get_logs();
         assert!(
-            logs.iter().any(|l| l.contains("EVENT_JSON") && l.contains("swap")),
+            logs.iter()
+                .any(|l| l.contains("EVENT_JSON") && l.contains("swap")),
             "le contrat publie un evenement mensonger"
         );
     }

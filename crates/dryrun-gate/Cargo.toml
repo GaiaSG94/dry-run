@@ -6,14 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 description = "Garde-barrière et serveur HTTP pour le pare-feu Dry Run"
 
-# Le vrai simulateur (`dryrun-sim`) est branché par la feature `real-sim`.
-# Tant que `crates/dryrun-sim` n'expose pas l'API de la section 4 du SPEC,
-# la feature `stub` (active par défaut) fournit un simulateur en mémoire qui
-# respecte la même signature, afin que le crate compile et se teste seul.
-# Pour basculer sur le vrai chemin :
-#   cargo build -p dryrun-gate --no-default-features --features real-sim
+# Le vrai simulateur (`dryrun-sim`, section 4 du SPEC) est le chemin par défaut.
+# La feature `stub` fournit un simulateur en mémoire qui respecte la même API,
+# pour compiler et tester le crate seul, sans `near-sandbox` :
+#   cargo build -p dryrun-gate --no-default-features --features stub
 [features]
-default = ["stub"]
+default = ["real-sim"]
 stub = []
 real-sim = ["dep:dryrun-sim"]
 

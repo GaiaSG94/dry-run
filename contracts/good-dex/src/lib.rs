@@ -9,6 +9,7 @@
 //!   1. par `ft_transfer_call(receiver_id = "good-dex.test.near", amount, msg = "fund")`
 //!      appelé sur `test-token` → `ft_on_transfer` crédite la réserve (chemin recommandé) ;
 //!   2. ou par `ft_transfer` vers `good-dex.test.near` **puis** `fund(amount)` sur le DEX.
+//!
 //!   Ne jamais combiner les deux pour la même quantité (le crédit serait doublé).
 
 use near_sdk::json_types::U128;

@@ -11,7 +11,10 @@ use near_sdk::{near, AccountId, Gas};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VaultAction {
     /// Sortie directe de NEAR vers un compte.
-    Transfer { receiver_id: AccountId, amount: U128 },
+    Transfer {
+        receiver_id: AccountId,
+        amount: U128,
+    },
     /// Appel de fonction sur un contrat, avec dépôt joint.
     Call {
         receiver_id: AccountId,
@@ -96,7 +99,7 @@ pub struct VaultStatus {
 }
 
 /// Une entrée du journal du coffre.
-#[near(serializers = [json])]
+#[near(serializers = [json, borsh])]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogEntry {
     /// Numéro d'ordre croissant (les entrées sortent par le plus petit).

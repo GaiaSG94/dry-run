@@ -175,7 +175,11 @@ mod tests {
                     let parsed: serde_json::Value =
                         serde_json::from_slice(&args).unwrap_or(serde_json::Value::Null);
                     let to = parsed["receiver_id"].as_str().unwrap_or("").to_string();
-                    let montant = parsed["amount"].as_str().unwrap_or("0").parse().unwrap_or(0);
+                    let montant = parsed["amount"]
+                        .as_str()
+                        .unwrap_or("0")
+                        .parse()
+                        .unwrap_or(0);
                     out.push((to, montant));
                 }
             }

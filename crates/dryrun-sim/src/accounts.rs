@@ -33,21 +33,61 @@ pub struct ContractSpec {
 
 /// Table des contrats : ordre de déploiement de la démonstration.
 pub const CONTRACTS: &[ContractSpec] = &[
-    ContractSpec { wasm: "vault", account: VAULT, is_vault: true },
-    ContractSpec { wasm: "good_dex", account: "good-dex.test.near", is_vault: false },
-    ContractSpec { wasm: "test_token", account: TEST_TOKEN, is_vault: false },
-    ContractSpec { wasm: "test_nft", account: TEST_NFT, is_vault: false },
-    ContractSpec { wasm: "trap_drainer", account: "drainer.test.near", is_vault: false },
-    ContractSpec { wasm: "trap_skimmer", account: "skimmer.test.near", is_vault: false },
-    ContractSpec { wasm: "trap_half_step", account: "half-step.test.near", is_vault: false },
-    ContractSpec { wasm: "trap_liar", account: "liar.test.near", is_vault: false },
-    ContractSpec { wasm: "trap_approver", account: "approver.test.near", is_vault: false },
-    ContractSpec { wasm: "trap_shapeshifter", account: "shapeshifter.test.near", is_vault: false },
+    ContractSpec {
+        wasm: "vault",
+        account: VAULT,
+        is_vault: true,
+    },
+    ContractSpec {
+        wasm: "good_dex",
+        account: "good-dex.test.near",
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "test_token",
+        account: TEST_TOKEN,
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "test_nft",
+        account: TEST_NFT,
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "trap_drainer",
+        account: "drainer.test.near",
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "trap_skimmer",
+        account: "skimmer.test.near",
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "trap_half_step",
+        account: "half-step.test.near",
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "trap_liar",
+        account: "liar.test.near",
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "trap_approver",
+        account: "approver.test.near",
+        is_vault: false,
+    },
+    ContractSpec {
+        wasm: "trap_shapeshifter",
+        account: "shapeshifter.test.near",
+        is_vault: false,
+    },
 ];
 
-/// Tous les comptes de la démo, dans l'ordre où ils sont créés à la genèse.
+/// Comptes créés à la genèse (`test.near` existe déjà : c'est le compte
+/// racine du bac à sable, il détient les clés de génèse de nearcore).
 pub const GENESIS_ACCOUNTS: &[&str] = &[
-    ROOT,
     OWNER,
     VAULT,
     BOB,
@@ -65,7 +105,7 @@ pub const GENESIS_ACCOUNTS: &[&str] = &[
 ];
 
 /// Comptes « froids » répliqués dans le bac à sable de simulation pour lire les deltas.
-pub const WATCHED_PLAIN: &[&str] = &[BOB, MALLORY, NFT_HOLDER, OWNER, ROOT];
+pub const WATCHED_PLAIN: &[&str] = &[BOB, MALLORY, NFT_HOLDER, OWNER];
 
 /// Comptes de frais (jamais des bénéficiaires).
 pub const FEE_ACCOUNTS: &[&str] = &["near", ROOT];

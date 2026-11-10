@@ -3,7 +3,7 @@
 //! Le serveur est branché sur le simulateur bouchon (`sim_stub`) : aucun bac à
 //! sable NEAR n'est nécessaire, donc le test tourne partout et vite.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,7 +19,9 @@ fn free_port() -> u16 {
 
 /// Démarre le serveur en tâche de fond et rend son URL de base.
 async fn start_server() -> String {
-    let sim = Simulator::start(Path::new("stub")).await.expect("stub");
+    // Le bouchon est utilisé même quand la version par défaut est le vrai
+    // simulateur : le test ne démarre donc aucun bac à sable NEAR.
+    let sim = Simulator::stub().await.expect("simulateur bouchon");
     let gate = Arc::new(Gatekeeper::from_sim(Arc::new(sim)));
     let web_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web");
     let server = Arc::new(HttpServer::new(gate, web_dir));
@@ -85,7 +87,10 @@ async fn propose_transfert_honnete_passe_en_allow() {
     assert_eq!(outcome["verdict"], "ALLOW");
     assert_eq!(outcome["executed"], true);
     assert!(outcome["rules"].is_array());
-    assert!(outcome["card"].as_str().unwrap_or("").contains("bob.test.near"));
+    assert!(outcome["card"]
+        .as_str()
+        .unwrap_or("")
+        .contains("bob.test.near"));
     assert_eq!(outcome["card_view"]["verdict_str"], "ALLOW");
     assert!(outcome["card_view"]["near_deltas"].is_array());
 }
@@ -170,4 +175,70 @@ async fn page_index_est_servie() {
         .expect("HTML");
     assert!(html.contains("Dry Run") || html.contains("DRY RUN"));
     assert!(html.contains("app.js"));
+}
+
+#[tokio::test]
+async fn contrat_inconnu_donne_warn_puis_confirmation_execute() {
+    let base = start_server().await;
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "kind": "function_call",
+        "contract": "nouveau.test.near",
+        "method": "pay",
+        "deposit": "1000000000000000000000000",
+        "intent": {
+            "summary": "payer nouveau.test.near",
+            "beneficiaries": ["nouveau.test.near"],
+            "min_in": []
+        }
+    });
+
+    let warn: serde_json::Value = client
+        .post(format!("{base}/api/propose"))
+        .json(&payload)
+        .send()
+        .await
+        .expect("requête propose")
+        .json()
+        .await
+        .expect("JSON outcome");
+    assert_eq!(warn["verdict"], "WARN");
+    assert_eq!(warn["executed"], false);
+
+    let confirmed = serde_json::json!({
+        "kind": "function_call",
+        "contract": "nouveau.test.near",
+        "method": "pay",
+        "deposit": "1000000000000000000000000",
+        "confirm": true,
+        "intent": {
+            "summary": "payer nouveau.test.near",
+            "beneficiaries": ["nouveau.test.near"],
+            "min_in": []
+        }
+    });
+    let after: serde_json::Value = client
+        .post(format!("{base}/api/propose"))
+        .json(&confirmed)
+        .send()
+        .await
+        .expect("requête propose confirmée")
+        .json()
+        .await
+        .expect("JSON outcome");
+    assert_eq!(after["verdict"], "WARN");
+    assert_eq!(after["executed"], true);
+}
+
+#[tokio::test]
+async fn requete_invalide_rend_400() {
+    let base = start_server().await;
+    let response = reqwest::Client::new()
+        .post(format!("{base}/api/propose"))
+        .header("Content-Type", "application/json")
+        .body("{ pas du json")
+        .send()
+        .await
+        .expect("requête propose");
+    assert_eq!(response.status(), 400);
 }

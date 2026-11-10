@@ -9,13 +9,25 @@ use crate::types::{
 
 /// Le tableau des règles, tel qu'il figure dans le cahier des charges.
 pub const RULES: &[(&str, &str)] = &[
-    ("R1", "sortie au-dessus du plafond par transaction ou du reste du jour"),
+    (
+        "R1",
+        "sortie au-dessus du plafond par transaction ou du reste du jour",
+    ),
     ("R2", "une clé d'accès apparaît sur l'un de nos comptes"),
-    ("R3", "approbation de NFT ou de multi-jeton vers un compte hors liste"),
-    ("R4", "transfert avec appel (ft_transfer_call) vers un contrat inconnu"),
+    (
+        "R3",
+        "approbation de NFT ou de multi-jeton vers un compte hors liste",
+    ),
+    (
+        "R4",
+        "transfert avec appel (ft_transfer_call) vers un contrat inconnu",
+    ),
     ("R5", "premier contact avec un contrat"),
     ("R6", "contrat connu dont l'empreinte du code a changé"),
-    ("R7", "un bénéficiaire que l'intention ne nomme pas reçoit quelque chose"),
+    (
+        "R7",
+        "un bénéficiaire que l'intention ne nomme pas reçoit quelque chose",
+    ),
     ("R8", "reçu moins que le minimum déclaré, ou rien"),
     ("R9", "un reçu échoue après une sortie de fonds"),
     ("R10", "gas brûlé ou dépôt de stockage au-dessus d'un seuil"),
@@ -95,7 +107,7 @@ impl RuleCtx {
 /// Juge les effets et rend un verdict.
 pub fn judge(ctx: &RuleCtx, eff: &Effects) -> Decision {
     let mut hits: Vec<RuleHit> = Vec::new();
-    for hit in [
+    for h in [
         r1_caps(ctx, eff),
         r2_keys(ctx, eff),
         r3_approvals(ctx, eff),
@@ -106,10 +118,11 @@ pub fn judge(ctx: &RuleCtx, eff: &Effects) -> Decision {
         r9_stranded(ctx, eff),
         r10_resources(ctx, eff),
         r11_touched(ctx, eff),
-    ] {
-        if let Some(h) = hit {
-            hits.push(h);
-        }
+    ]
+    .into_iter()
+    .flatten()
+    {
+        hits.push(h);
     }
     // R5 (premier contact) n'a de sens que si rien de plus grave n'a mordu.
     if !hits.iter().any(|h| h.id == "R4") {
@@ -282,7 +295,10 @@ fn r7_undeclared(ctx: &RuleCtx, eff: &Effects) -> Option<RuleHit> {
         return Some(RuleHit {
             id: "R7".into(),
             title: "bénéficiaire non déclaré".into(),
-            detail: format!("{} a reçu {} sans être nommé dans l'intention", account, what),
+            detail: format!(
+                "{} a reçu {} sans être nommé dans l'intention",
+                account, what
+            ),
             severity: Verdict::Block,
         });
     }
@@ -293,7 +309,7 @@ fn r7_undeclared(ctx: &RuleCtx, eff: &Effects) -> Option<RuleHit> {
 fn r8_minimum(ctx: &RuleCtx, eff: &Effects) -> Option<RuleHit> {
     for (token, min) in &ctx.intent.min_in {
         let got = eff.ft_delta_of(token, &ctx.vault);
-        if (got as i128) < (*min as i128) {
+        if got < (*min as i128) {
             return Some(RuleHit {
                 id: "R8".into(),
                 title: "moins reçu que promis".into(),

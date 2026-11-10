@@ -124,7 +124,8 @@ impl Rpc {
             .pointer("/header/hash")
             .and_then(Value::as_str)
             .ok_or_else(|| anyhow!("block : hash absent"))?;
-        hash.parse().context("block : hash invalide")
+        let parsed: CryptoHash = hash.parse().map_err(|_| anyhow!("block : hash invalide"))?;
+        Ok(parsed)
     }
 
     /// État d'un compte, `None` s'il n'existe pas.
@@ -135,13 +136,101 @@ impl Rpc {
                 json!({"request_type": "view_account", "finality": "optimistic", "account_id": account}),
             )
             .await;
-        let Some(result) = result else { return Ok(None) };
+        let Some(result) = result else {
+            return Ok(None);
+        };
         let view: AccountView = serde_json::from_value(result).context("view_account illisible")?;
         Ok(Some(AccountInfo {
             amount: view.amount,
             code_hash: view.code_hash.to_string(),
             storage_usage: view.storage_usage,
         }))
+    }
+
+    /// État d'un compte **brut** (JSON du nœud), prêt à être réinjecté.
+    pub async fn account_json(&self, account: &AccountId) -> Result<Option<Value>> {
+        Ok(self
+            .try_call(
+                "query",
+                json!({"request_type": "view_account", "finality": "optimistic", "account_id": account}),
+            )
+            .await)
+    }
+
+    /// Code du contrat en base64, `None` s'il n'y en a pas.
+    pub async fn code_b64(&self, account: &AccountId) -> Result<Option<String>> {
+        let Some(result) = self
+            .try_call(
+                "query",
+                json!({"request_type": "view_code", "finality": "optimistic", "account_id": account}),
+            )
+            .await
+        else {
+            return Ok(None);
+        };
+        Ok(result
+            .get("code_base64")
+            .and_then(Value::as_str)
+            .filter(|code| !code.is_empty())
+            .map(str::to_string))
+    }
+
+    /// Paires `(clé, valeur)` du stockage d'un compte, en base64.
+    pub async fn state_items(&self, account: &AccountId) -> Result<Vec<(String, String)>> {
+        let Some(result) = self
+            .try_call(
+                "query",
+                json!({
+                    "request_type": "view_state",
+                    "finality": "optimistic",
+                    "account_id": account,
+                    "include_proof": false,
+                    "prefix_base64": "",
+                }),
+            )
+            .await
+        else {
+            return Ok(Vec::new());
+        };
+        let entries = result
+            .get("values")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        Ok(entries
+            .iter()
+            .filter_map(|entry| {
+                let key = entry.get("key")?.as_str()?.to_string();
+                let value = entry.get("value")?.as_str()?.to_string();
+                Some((key, value))
+            })
+            .collect())
+    }
+
+    /// Clés d'accès sous forme `(clé publique, vue JSON)`.
+    pub async fn access_keys_json(&self, account: &AccountId) -> Result<Vec<(String, Value)>> {
+        let Some(result) = self
+            .try_call(
+                "query",
+                json!({"request_type": "view_access_key_list", "finality": "optimistic", "account_id": account}),
+            )
+            .await
+        else {
+            return Ok(Vec::new());
+        };
+        let keys = result
+            .get("keys")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        Ok(keys
+            .iter()
+            .filter_map(|key| {
+                let public = key.get("public_key")?.as_str()?.to_string();
+                let access_key = key.get("access_key")?.clone();
+                Some((public, access_key))
+            })
+            .collect())
     }
 
     /// Clés d'accès d'un compte.
@@ -172,8 +261,15 @@ impl Rpc {
                 }),
             )
             .await;
-        let Some(result) = result else { return Ok(None) };
-        let view: AccessKeyView = serde_json::from_value(result).context("view_access_key illisible")?;
+        let Some(result) = result else {
+            return Ok(None);
+        };
+        // Clé absente : le nœud renvoie une erreur `UNKNOWN_ACCESS_KEY` comptée
+        // comme une réponse ; toute vue illisible vaut « clé inconnue ».
+        let view: AccessKeyView = match serde_json::from_value(result) {
+            Ok(view) => view,
+            Err(_) => return Ok(None),
+        };
         Ok(Some(view.nonce))
     }
 
@@ -203,22 +299,41 @@ impl Rpc {
         args: &Value,
     ) -> Result<Value> {
         let args = serde_json::to_vec(args).context("sérialisation des arguments")?;
-        let result = self
-            .call(
-                "query",
-                json!({
-                    "request_type": "call",
-                    "finality": "optimistic",
-                    "account_id": account,
-                    "method_name": method,
-                    "args_base64": b64(&args),
-                }),
-            )
-            .await?;
+        // `call_function` est le nom actuel ; `call` celui des nœuds plus anciens.
+        let mut outcome: Option<Result<Value>> = None;
+        for request_type in ["call_function", "call"] {
+            let params = json!({
+                "request_type": request_type,
+                "finality": "optimistic",
+                "account_id": account,
+                "method_name": method,
+                "args_base64": b64(&args),
+            });
+            match self.call("query", params).await {
+                Ok(result) => {
+                    outcome = Some(Ok(result));
+                    break;
+                }
+                Err(error) => {
+                    outcome = Some(Err(error));
+                }
+            }
+        }
+        let result = match outcome {
+            Some(Ok(result)) => result,
+            Some(Err(error)) => return Err(error),
+            None => return Err(anyhow!("call {account}.{method} : aucune réponse")),
+        };
         let bytes: Vec<u8> = result
             .get("result")
             .and_then(Value::as_array)
-            .map(|items| items.iter().filter_map(|v| v.as_u64()).map(|v| v as u8).collect())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|v| v.as_u64())
+                    .map(|v| v as u8)
+                    .collect()
+            })
             .ok_or_else(|| anyhow!("call {account}.{method} : champ `result` absent"))?;
         if bytes.is_empty() {
             return Ok(Value::Null);
@@ -228,7 +343,10 @@ impl Rpc {
     }
 
     /// Envoie une transaction signée et attend la fin des reçus.
-    pub async fn send(&self, tx: &near_primitives::transaction::SignedTransaction) -> Result<FinalExecutionOutcomeView> {
+    pub async fn send(
+        &self,
+        tx: &near_primitives::transaction::SignedTransaction,
+    ) -> Result<FinalExecutionOutcomeView> {
         let bytes = borsh::to_vec(tx).context("encodage borsh de la transaction")?;
         let params = json!({
             "signed_tx_base64": b64(&bytes),
@@ -237,11 +355,10 @@ impl Rpc {
         let result = match self.call("send_tx", params.clone()).await {
             Ok(result) => result,
             // Les vieux nœuds n'ont que `broadcast_tx_commit`.
-            Err(_) => {
-                self.call("broadcast_tx_commit", json!([b64(&bytes)]))
-                    .await
-                    .context("envoi de la transaction refusé")?
-            }
+            Err(_) => self
+                .call("broadcast_tx_commit", json!([b64(&bytes)]))
+                .await
+                .context("envoi de la transaction refusé")?,
         };
         let outcome: FinalExecutionOutcomeView =
             serde_json::from_value(result).context("résultat d'exécution illisible")?;
@@ -287,7 +404,7 @@ pub fn sign_transaction(
     block_hash: CryptoHash,
     actions: Vec<near_primitives::transaction::Action>,
 ) -> near_primitives::transaction::SignedTransaction {
-    use near_primitives::transaction::{Transaction, TransactionV0, SignedTransaction};
+    use near_primitives::transaction::{SignedTransaction, Transaction, TransactionV0};
 
     let transaction = Transaction::V0(TransactionV0 {
         signer_id: signer_id.clone(),

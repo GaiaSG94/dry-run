@@ -221,8 +221,7 @@ impl Effects {
 
     /// Les effets contiennent-ils une sortie de fonds ?
     pub fn has_outflow(&self) -> bool {
-        self.near_delta.iter().any(|d| d.delta < 0)
-            || self.ft_delta.iter().any(|d| d.delta < 0)
+        self.near_delta.iter().any(|d| d.delta < 0) || self.ft_delta.iter().any(|d| d.delta < 0)
     }
 }
 

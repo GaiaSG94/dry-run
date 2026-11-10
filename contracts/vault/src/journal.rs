@@ -25,8 +25,8 @@ impl Journal {
         at: u64,
     ) {
         let entry = LogEntry {
-            seq: U128(self.next_seq),
-            at: U128(at),
+            seq: U128(self.next_seq.into()),
+            at: U128(at.into()),
             kind: kind.to_string(),
             receiver: receiver.cloned(),
             amount: U128(amount),
@@ -43,7 +43,7 @@ impl Journal {
     pub fn entries_from(&self, from: u64, limit: u32) -> Vec<LogEntry> {
         self.entries
             .iter()
-            .filter(|e| e.seq.0 >= from)
+            .filter(|e| e.seq.0 >= u128::from(from))
             .take(limit.min(LOG_CAPACITY as u32) as usize)
             .cloned()
             .collect()

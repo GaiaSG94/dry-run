@@ -1,15 +1,16 @@
 //! Le bac à sable de simulation : on rejoue la transaction « en tant que le coffre ».
 //!
-//! Un bac à sable neuf est démarré pour **chaque** simulation : l'état repart
-//! toujours de la chaîne, aucune trace d'une simulation hostile ne survit.
-//! Compromis assumé (≈ 1 s de démarrage) documenté dans le README du crate.
+//! Un bac à sable neuf est démarré pour **chaque** simulation (≈ 0,55 s) :
+//! l'état repart toujours de la chaîne, aucune trace d'une simulation hostile
+//! (clé posée, stockage créé) ne survit. Compromis documenté dans le README.
 
 use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use near_crypto::SecretKey;
-use near_sandbox::{FetchData, Sandbox};
+use near_sandbox::sandbox::patch::StateRecord;
+use near_sandbox::Sandbox;
 use near_token::NearToken;
 
 use near_primitives::action::{Action, FunctionCallAction, TransferAction};
@@ -38,7 +39,7 @@ pub struct SimSandbox {
 impl SimSandbox {
     /// Démarre un bac à sable vierge.
     pub async fn start() -> Result<Self> {
-        let sandbox = Sandbox::start_sandbox()
+        let sandbox = Sandbox::start_sandbox_with_config(crate::sandbox_cfg::config(Vec::new()))
             .await
             .context("démarrage du bac à sable de simulation")?;
         let rpc = Rpc::new(&sandbox.rpc_addr)?;
@@ -55,6 +56,7 @@ pub struct Replay {
 
 /// Rejoue une demande sur un bac à sable neuf et rend les effets observés.
 pub async fn replay(chain: &Chain, demand: &Demande, intent: &Intent) -> Result<Replay> {
+    let debut = std::time::Instant::now();
     let sim = SimSandbox::start().await?;
     let watched = watch_list(demand, intent);
     let token = token_present(chain).await;
@@ -62,20 +64,32 @@ pub async fn replay(chain: &Chain, demand: &Demande, intent: &Intent) -> Result<
     let before = effects::snapshot(&sim.rpc, &watched, token.as_deref()).await?;
     let execution = run(&sim, demand).await?;
     let after = effects::snapshot(&sim.rpc, &watched, token.as_deref()).await?;
+    tracing::debug!(resume = %demand.summary(), elapsed = ?debut.elapsed(), "rejeu terminé");
     let info = effects::ExecutionInfo {
         receipts: execution.receipts.clone(),
         gas_burnt: execution.gas_burnt,
         height: after.height,
         block_hash: after.block_hash.clone(),
     };
+    // Si le réseau refuse la transaction avant exécution (solde insuffisant,
+    // nonce, ...), on rapporte la sortie **demandée** : le pare-feu ne doit
+    // jamais conclure ALLOW faute d'avoir pu observer quelque chose.
+    let refused =
+        (!execution.success && execution.receipts.is_empty()).then(|| effects::RejectedAttempt {
+            amount: demand.amount(),
+        });
     let produced = effects::effects(
         &before,
         &after,
         &info,
         accounts::VAULT,
         &[SIM_KEY_PUBLIC.to_string()],
+        refused.as_ref(),
     );
-    Ok(Replay { effects: produced, execution })
+    Ok(Replay {
+        effects: produced,
+        execution,
+    })
 }
 
 /// Comptes à observer : le coffre, la cible, les bénéficiaires, les comptes de la démo.
@@ -114,10 +128,13 @@ async fn token_present(chain: &Chain) -> Option<String> {
 
 /// Recharge dans le bac à sable de simulation l'état utile de la chaîne.
 ///
-/// Compromis assumé : seuls le coffre, la cible et le jeton sont copiés
-/// intégralement (code + stockage + clés). Les autres comptes ne sont copiés
-/// que pour leur solde et leurs clés, ce qui suffit à lire les deltas et
-/// divise le volume de données transférées.
+/// Compromis assumé : le coffre, la cible et le jeton sont copiés
+/// intégralement (compte + stockage + code + clés) ; les autres comptes
+/// seulement pour leur compte et leurs clés, ce qui suffit à lire les deltas
+/// et divise le volume transféré.
+///
+/// Les enregistrements partent en **un seul** `patch_state` : chaque envoi
+/// coûte une attente de bloc (≈ 0,4 s), c'est le principal poste de latence.
 async fn load_state(
     chain: &Chain,
     sim: &SimSandbox,
@@ -125,56 +142,81 @@ async fn load_state(
     watched: &[String],
     token: Option<&str>,
 ) -> Result<()> {
-    let mut vault_copied = false;
+    let mut records = Vec::new();
+    let mut vault_seen = false;
     for name in watched {
+        let Ok(account) = AccountId::from_str(name) else {
+            continue;
+        };
         let full = name == accounts::VAULT
             || Some(name.as_str()) == demand.target()
             || Some(name.as_str()) == token;
-        let data = if full { FetchData::ALL } else { FetchData::new().account().access_keys() };
-        let is_vault = name == accounts::VAULT;
-        if copy(chain, sim, name, data, is_vault).await? && is_vault {
-            vault_copied = true;
-        }
+        records.extend(records_of(chain, &account, full).await?);
+        vault_seen |= name == accounts::VAULT;
     }
-    if !vault_copied {
+    if !vault_seen {
         anyhow::bail!("le compte du coffre n'existe pas sur la chaîne : déployez d'abord");
     }
+    let vault: AccountId = accounts::VAULT.parse()?;
+    let mut patch = sim.sandbox.patch_state(vault);
+    for record in records {
+        patch = patch.state_record(record);
+    }
+    patch
+        .with_default_access_key()
+        .send()
+        .await
+        .context("copie de l'état vers le bac à sable de simulation")?;
     Ok(())
 }
 
-/// Copie un compte de la chaîne vers le bac à sable ; rend `false` s'il n'existe pas.
-async fn copy(
-    chain: &Chain,
-    sim: &SimSandbox,
-    name: &str,
-    data: FetchData,
-    signable: bool,
-) -> Result<bool> {
-    let Ok(account) = AccountId::from_str(name) else { return Ok(false) };
-    let mut patch = match sim.sandbox.patch_state(account).fetch_from(chain.rpc_url(), data).await {
-        Ok(patch) => patch,
-        Err(error) => {
-            tracing::debug!(account = name, %error, "compte absent de la chaîne");
-            return Ok(false);
-        }
+/// Enregistrements d'état d'un compte, prêts pour `sandbox_patch_state`.
+async fn records_of(chain: &Chain, account: &AccountId, full: bool) -> Result<Vec<StateRecord>> {
+    let mut records = Vec::new();
+    let Some(view) = chain.rpc.account_json(account).await? else {
+        tracing::debug!(%account, "compte absent de la chaîne");
+        return Ok(records);
     };
-    if signable {
-        patch = patch.with_default_access_key();
+    records.push(StateRecord::Account {
+        account_id: account.clone(),
+        account: view,
+    });
+    for (public_key, access_key) in chain.rpc.access_keys_json(account).await? {
+        records.push(StateRecord::AccessKey {
+            account_id: account.clone(),
+            public_key_base64: public_key,
+            access_key,
+        });
     }
-    match patch.send().await {
-        Ok(()) => Ok(true),
-        Err(error) => {
-            tracing::debug!(account = name, %error, "compte non copié");
-            Ok(false)
-        }
+    if !full {
+        return Ok(records);
     }
+    if let Some(code_base64) = chain.rpc.code_b64(account).await? {
+        records.push(StateRecord::Contract {
+            account_id: account.clone(),
+            code_base64,
+        });
+    }
+    for (data_key_base64, value_base64) in chain.rpc.state_items(account).await? {
+        records.push(StateRecord::Data {
+            account_id: account.clone(),
+            data_key_base64,
+            value_base64,
+        });
+    }
+    Ok(records)
 }
 
 /// Joue la demande depuis le compte du coffre.
 async fn run(sim: &SimSandbox, demand: &Demande) -> Result<Execution> {
     let vault: AccountId = accounts::VAULT.parse()?;
     let key = SecretKey::from_str(SIM_KEY_PRIVATE).context("clé de simulation invalide")?;
-    let nonce = sim.rpc.key_nonce(&vault, &key.public_key()).await?.unwrap_or(0) + 1;
+    let nonce = sim
+        .rpc
+        .key_nonce(&vault, &key.public_key())
+        .await?
+        .unwrap_or(0)
+        + 1;
     let block_hash = sim.rpc.block_hash().await?;
     let (receiver, action) = action_of(demand)?;
     let tx: SignedTransaction =
@@ -193,15 +235,24 @@ async fn run(sim: &SimSandbox, demand: &Demande) -> Result<Execution> {
 fn action_of(demand: &Demande) -> Result<(AccountId, Action)> {
     match demand {
         Demande::Transfer { to, amount } => {
-            let receiver: AccountId = to.parse().with_context(|| format!("destinataire invalide : {to}"))?;
+            let receiver: AccountId = to
+                .parse()
+                .with_context(|| format!("destinataire invalide : {to}"))?;
             let action = Action::Transfer(TransferAction {
                 deposit: NearToken::from_yoctonear(*amount),
             });
             Ok((receiver, action))
         }
-        Demande::FunctionCall { contract, method, args, deposit, gas } => {
-            let receiver: AccountId =
-                contract.parse().with_context(|| format!("contrat invalide : {contract}"))?;
+        Demande::FunctionCall {
+            contract,
+            method,
+            args,
+            deposit,
+            gas,
+        } => {
+            let receiver: AccountId = contract
+                .parse()
+                .with_context(|| format!("contrat invalide : {contract}"))?;
             let encoded = serde_json::to_vec(args).context("encodage des arguments")?;
             let action = Action::FunctionCall(Box::new(FunctionCallAction {
                 method_name: method.clone(),
@@ -213,4 +264,3 @@ fn action_of(demand: &Demande) -> Result<(AccountId, Action)> {
         }
     }
 }
-
