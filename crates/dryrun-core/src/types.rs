@@ -302,6 +302,65 @@ impl Decision {
 /// Contrat connu du propriétaire : compte → empreinte du code à l'accord.
 pub type KnownContracts = BTreeMap<String, String>;
 
+/// Sérialisation d'un `u128` (yoctoNEAR) sous forme de chaîne décimale.
+///
+/// `serde_json` ne sait pas représenter un `u128` supérieur à `u64` : sans
+/// cette conversion, un certificat contenant un montant de 2 NEAR serait
+/// impossible à encoder.
+pub mod u128_as_string {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    /// Écrit le nombre sous forme de chaîne.
+    pub fn serialize<S: Serializer>(value: &u128, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&value.to_string())
+    }
+
+    /// Relit le nombre depuis une chaîne (ou un nombre JSON).
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<u128, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Text(String),
+            Number(u64),
+        }
+        match Repr::deserialize(deserializer)? {
+            Repr::Text(text) => text.parse().map_err(serde::de::Error::custom),
+            Repr::Number(number) => Ok(number as u128),
+        }
+    }
+}
+
+/// Sérialisation des post-conditions : chaque minimum est une chaîne.
+pub mod post_conditions {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    /// Écrit les post-conditions sous forme de paires `[jeton, "montant"]`.
+    pub fn serialize<S: Serializer>(
+        value: &[(String, u128)],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        value
+            .iter()
+            .map(|(token, min)| (token.clone(), min.to_string()))
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+
+    /// Relit les post-conditions.
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<(String, u128)>, D::Error> {
+        let raw = Vec::<(String, String)>::deserialize(deserializer)?;
+        raw.into_iter()
+            .map(|(token, min)| {
+                min.parse::<u128>()
+                    .map(|value| (token, value))
+                    .map_err(serde::de::Error::custom)
+            })
+            .collect()
+    }
+}
+
 /// Certificat de simulation cryptographique (Niveau V1).
 /// Engagement signé du simulateur sur une demande précise.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -313,8 +372,10 @@ pub struct Cert {
     /// Hauteur de bloc d'expiration (vingt blocs de fraîcheur).
     pub expires_height: u64,
     /// Sortie maximale autorisée en yoctoNEAR.
+    #[serde(with = "u128_as_string")]
     pub max_out: Yocto,
     /// Post-conditions requises : jetons et soldes minimaux promis en retour.
+    #[serde(with = "post_conditions")]
     pub post: Vec<(String, Yocto)>,
     /// Nonce unique anti-rejeu.
     pub nonce: u64,
@@ -322,9 +383,11 @@ pub struct Cert {
 
 /// Représentation canonique d'une action de coffre.
 ///
-/// Le simulateur et le contrat construisent **exactement** le même objet, ce
+/// Le simulateur et le contrat construisent **exactement** la même chaîne, ce
 /// qui garantit que le condensé du certificat correspond à la demande reçue.
-/// Les montants sont des chaînes décimales pour éviter toute ambiguïté de type.
+/// Le format est volontairement explicite (et non JSON) : l'ordre des clés
+/// d'un objet JSON dépend des features de compilation de `serde_json`, ce qui
+/// rendrait le condensé instable entre le contrat wasm et le simulateur.
 pub fn canonical_action(
     kind: &str,
     receiver: &str,
@@ -332,27 +395,17 @@ pub fn canonical_action(
     args: &str,
     deposit: u128,
     gas: u64,
-) -> serde_json::Value {
+) -> String {
     if kind == "transfer" {
-        serde_json::json!({
-            "Transfer": { "receiver_id": receiver, "amount": deposit.to_string() }
-        })
+        format!("transfer|{receiver}|{deposit}")
     } else {
-        serde_json::json!({
-            "Call": {
-                "receiver_id": receiver,
-                "method_name": method,
-                "args": args,
-                "deposit": deposit.to_string(),
-                "gas": gas.to_string(),
-            }
-        })
+        format!("call|{receiver}|{method}|{args}|{deposit}|{gas}")
     }
 }
 
 impl Demande {
     /// Forme canonique de la demande, telle que le coffre la recomputera.
-    pub fn canonical_json(&self) -> serde_json::Value {
+    pub fn canonical(&self) -> String {
         match self {
             Demande::Transfer { to, amount } => {
                 canonical_action("transfer", to, "", "", *amount, 0)
@@ -374,16 +427,15 @@ pub fn encode_args(args: &serde_json::Value) -> String {
 }
 
 impl Cert {
-    /// Condensé SHA-256 d'une valeur canonique, encodé en hexadécimal.
-    pub fn digest_of(value: &serde_json::Value) -> String {
+    /// Condensé SHA-256 d'une chaîne canonique, encodé en hexadécimal.
+    pub fn digest_of(canonical: &str) -> String {
         use sha2::{Digest, Sha256};
-        let bytes = serde_json::to_vec(value).unwrap_or_default();
-        hex::encode(Sha256::digest(bytes))
+        hex::encode(Sha256::digest(canonical.as_bytes()))
     }
 
     /// Calcule le digest canonique d'une demande pour le certificat.
     pub fn compute_digest(demand: &Demande) -> String {
-        Self::digest_of(&demand.canonical_json())
+        Self::digest_of(&demand.canonical())
     }
 }
 

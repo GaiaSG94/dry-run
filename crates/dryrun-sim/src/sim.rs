@@ -25,6 +25,9 @@ use crate::effects;
 use crate::outcome::{self, Execution};
 use crate::rpc::{sign_transaction, Rpc};
 
+/// Solde des comptes vides créés dans le bac à sable (assez pour payer le gas).
+pub const EMPTY_BALANCE: u128 = 10 * 10u128.pow(24);
+
 /// Clé plein accès posée sur le coffre dans le bac à sable de simulation.
 pub const SIM_KEY_PUBLIC: &str = near_sandbox::config::DEFAULT_GENESIS_ACCOUNT_PUBLIC_KEY;
 /// Clé privée correspondante (constante publique du bac à sable NEAR).
@@ -118,14 +121,10 @@ pub fn watch_list(demand: &Demande, intent: &Intent) -> Vec<String> {
     for name in accounts::WATCHED_PLAIN {
         push(name, &mut out);
     }
-    // Si l'intention mentionne un jeton, le contrat du jeton doit être copié
-    for (name, _) in &intent.min_in {
-        if name == "TEST" {
-            push("test-token.test.near", &mut out);
-        } else if name.ends_with(".near") {
-            push(name, &mut out);
-        }
-    }
+    // Les registres de jetons sont toujours copiés : un piège peut toucher un
+    // jeton ou un NFT sans que l'intention le mentionne (règles R3 et R7).
+    push(accounts::TEST_TOKEN, &mut out);
+    push(accounts::TEST_NFT, &mut out);
     out
 }
 
@@ -160,11 +159,38 @@ async fn load_state(
         let Ok(account) = AccountId::from_str(name) else {
             continue;
         };
+        // Tous les contrats de la démo sont copiés intégralement : un appel
+        // inter-contrats peut en toucher plusieurs (DEX → jeton → coffre).
         let full = name == accounts::VAULT
             || Some(name.as_str()) == demand.target()
-            || Some(name.as_str()) == token;
-        records.extend(records_of(chain, &account, full).await?);
+            || Some(name.as_str()) == token
+            || accounts::INSTRUMENTS.contains(&name.as_str())
+            || accounts::CONTRACTS
+                .iter()
+                .any(|spec| spec.account == name.as_str());
+        let recs = records_of(chain, &account, full).await?;
+        if name == accounts::TEST_NFT || name == accounts::TEST_TOKEN || name == accounts::VAULT {
+            tracing::info!(%name, full, records = recs.len(), "état copié");
+        }
+        records.extend(recs);
         vault_seen |= name == accounts::VAULT;
+    }
+    // Comptes vides que la transaction peut toucher (ex. `ghost.test.near`
+    // appelé par le piège `half-step`) : le bac à sable doit les connaître,
+    // sinon le reçu échoue pour une mauvaise raison (compte inexistant).
+    for name in accounts::EMPTY_ACCOUNTS.iter() {
+        let Ok(account) = AccountId::from_str(name) else {
+            continue;
+        };
+        records.push(StateRecord::Account {
+            account_id: account,
+            account: serde_json::json!({
+                "amount": EMPTY_BALANCE.to_string(),
+                "locked": "0",
+                "code_hash": "11111111111111111111111111111111",
+                "storage_usage": 0,
+            }),
+        });
     }
     if !vault_seen {
         anyhow::bail!("le compte du coffre n'existe pas sur la chaîne : déployez d'abord");
@@ -265,7 +291,16 @@ fn action_of(demand: &Demande) -> Result<(AccountId, Action)> {
             let receiver: AccountId = contract
                 .parse()
                 .with_context(|| format!("contrat invalide : {contract}"))?;
-            let encoded = serde_json::to_vec(args).context("encodage des arguments")?;
+            // Les arguments doivent être un objet JSON dont les clés correspondent
+            // aux paramètres de la méthode (near-sdk 5). Une chaîne seule ou `Null`
+            // est enveloppée en `{"args": "..."}` pour les pièges `trap(args)`.
+            let encoded = match args {
+                serde_json::Value::Null => serde_json::to_vec(&serde_json::json!({"args": ""}))?,
+                serde_json::Value::String(text) => {
+                    serde_json::to_vec(&serde_json::json!({"args": text}))?
+                }
+                other => serde_json::to_vec(other).context("encodage des arguments")?,
+            };
             let action = Action::FunctionCall(Box::new(FunctionCallAction {
                 method_name: method.clone(),
                 args: encoded,

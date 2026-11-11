@@ -1,6 +1,7 @@
 //! Bibliothèque du crate dryrun-gate : garde-barrière, serveur HTTP, frise.
 
 pub mod amount;
+pub mod attack;
 pub mod backend;
 pub mod bench;
 pub mod cardfmt;

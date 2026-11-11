@@ -70,14 +70,29 @@ fn extract_sim_choice(args: Vec<String>) -> (Vec<String>, SimChoice) {
 
 /// Construit le garde-barrière selon le simulateur demandé.
 async fn open_gate(choice: SimChoice) -> anyhow::Result<Gatekeeper> {
-    match choice {
-        SimChoice::Stub => Ok(Gatekeeper::from_sim(Arc::new(Simulator::stub().await?))),
-        SimChoice::Real | SimChoice::Auto => Gatekeeper::start(Path::new(DEFAULT_WASM_DIR)).await,
+    let gate = match choice {
+        SimChoice::Stub => Gatekeeper::from_sim(Arc::new(Simulator::stub().await?)),
+        SimChoice::Real | SimChoice::Auto => Gatekeeper::start(Path::new(DEFAULT_WASM_DIR)).await?,
+    };
+    // Niveau V1 : le propriétaire dépose la clé publique du simulateur sur le
+    // coffre. À partir de là, le coffre n'exécute **que** des demandes
+    // accompagnées d'un certificat signé et frais : voler la clé de l'agent ne
+    // suffit plus. En démonstration locale, la clé du propriétaire vit dans ce
+    // processus ; en production, c'est un geste du propriétaire (voir README).
+    match gate.install_sim_key().await {
+        Ok(key) => println!("clé du simulateur enregistrée sur le coffre : {key}"),
+        Err(err) => eprintln!("certificats inactifs ({err:#})"),
     }
+    Ok(gate)
 }
 
 /// Exécute une commande qui a besoin du garde-barrière.
 async fn run(command: Command, sim_choice: SimChoice) -> anyhow::Result<()> {
+    // `sim` n'a pas besoin de chaîne : il juge le moteur de règles sur un corpus
+    // synthétique. On ne démarre donc pas le bac à sable pour rien.
+    if let Command::Sim { seed } = command {
+        return run_bench(seed);
+    }
     let gate = open_gate(sim_choice).await?;
     match command {
         Command::Propose { demand, intent } => propose(&gate, demand, intent).await,
@@ -90,18 +105,24 @@ async fn run(command: Command, sim_choice: SimChoice) -> anyhow::Result<()> {
         Command::Status => status(&gate).await,
         Command::Log => show_log(&gate),
         Command::Demo => demo::run_demo(&gate).await,
-        Command::Attack => demo::run_attack(&gate).await,
+        Command::Attack => dryrun_gate::attack::run_attack(&gate).await,
         Command::Serve { port, web_dir } => serve(gate, port, web_dir).await,
-        Command::Sim { seed } => {
-            let report = dryrun_gate::bench::run_bench(seed);
-            dryrun_gate::bench::print_report(&report);
-            dryrun_gate::bench::save_json(&report, std::path::Path::new("bench_matrix.json"))?;
-            println!("Rapport sauvegardé dans bench_matrix.json");
-            Ok(())
+        Command::Sim { seed } => run_bench(seed),
+        Command::Mcp => {
+            eprintln!("serveur MCP Dry Run (JSON-RPC 2.0 sur stdin/stdout)");
+            dryrun_gate::mcp::run_mcp_server(Arc::new(gate)).await
         }
-        Command::Mcp => dryrun_gate::mcp::run_mcp_server(Arc::new(gate)).await,
         Command::Help => Ok(()),
     }
+}
+
+/// Banc de test : 200 robots, matrice de confusion, rapport JSON.
+fn run_bench(seed: u64) -> anyhow::Result<()> {
+    let report = dryrun_gate::bench::run_bench(seed);
+    dryrun_gate::bench::print_report(&report);
+    dryrun_gate::bench::save_json(&report, std::path::Path::new("bench_matrix.json"))?;
+    println!("Rapport sauvegardé dans bench_matrix.json");
+    Ok(())
 }
 
 /// Traite une proposition : carte, puis refus, confirmation ou signature.
@@ -174,6 +195,12 @@ fn print_rules(outcome: &Outcome) {
 
 /// Pose une question fermée sur l'entrée standard.
 fn ask_yes_no(question: &str) -> bool {
+    use std::io::IsTerminal;
+    if !std::io::stdin().is_terminal() {
+        println!();
+        println!("Mode non interactif : répondez « --yes » pour confirmer malgré l'avertissement.");
+        return false;
+    }
     print!("{question}");
     let _ = std::io::stdout().flush();
     let mut answer = String::new();
@@ -270,6 +297,8 @@ fn print_help() {
     println!("  dryrun-gate status");
     println!("  dryrun-gate log");
     println!("  dryrun-gate serve [--port 8787] [--web-dir web]");
+    println!("  dryrun-gate sim [graine]     # banc de 200 robots + matrice de confusion");
+    println!("  dryrun-gate mcp              # serveur MCP (Claude Desktop, Cursor, ZeroClaw)");
     println!();
     println!("Option globale : --sim auto|real|stub (défaut : auto).");
     println!("`stub` joue la démonstration sur un coffre en mémoire, sans bac à sable.");

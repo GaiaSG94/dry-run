@@ -135,6 +135,16 @@ impl Simulator {
         "0".repeat(64)
     }
 
+    /// Le bouchon n'a pas de chaîne : l'appel du propriétaire est sans effet.
+    pub async fn owner_call(
+        &self,
+        _contract: &str,
+        _method: &str,
+        _args: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     /// Le bouchon n'a pas de coffre : l'installation est un succès sans effet.
     pub async fn install_sim_key(&self) -> anyhow::Result<()> {
         Ok(())
@@ -254,6 +264,11 @@ fn rule_ctx(demand: &Demande, intent: &Intent, state: &State) -> RuleCtx {
         daily_cap: DAILY_CAP,
         daily_spent: state.spent_24h,
         fee_accounts: vec!["near".to_string(), "test.near".to_string()],
+        instrument_accounts: vec![
+            "test-token.test.near".to_string(),
+            "test-nft.test.near".to_string(),
+            "good-dex.test.near".to_string(),
+        ],
         gas_threshold: 100 * 10u64.pow(12),
         storage_threshold: 10 * 10u128.pow(24),
         max_touched: 8,

@@ -162,6 +162,16 @@ impl Simulator {
         dispatch!(self, sim => sim.freeze().await)
     }
 
+    /// Appel d'une méthode par le propriétaire (geste du propriétaire).
+    pub async fn owner_call(
+        &self,
+        contract: &str,
+        method: &str,
+        args: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        dispatch!(self, sim => sim.owner_call(contract, method, args).await.map(|_| ()))
+    }
+
     /// Approuve un contrat (clé du propriétaire).
     pub async fn approve_contract(&self, account: &str, code_hash: &str) -> anyhow::Result<()> {
         dispatch!(self, sim => sim.approve_contract(account, code_hash).await)

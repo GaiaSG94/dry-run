@@ -30,8 +30,8 @@ pub enum Command {
     Help,
 }
 
-/// Convertit un montant NEAR décimal en yoctoNEAR (1 NEAR = 10^24 yocto).
-pub fn parse_near(text: &str) -> anyhow::Result<Yocto> {
+/// Convertit un montant décimal de jeton avec un nombre donné de décimales.
+pub fn parse_token_amount(text: &str, decimals: u32) -> anyhow::Result<Yocto> {
     let trimmed = text.trim();
     let mut parts = trimmed.split('.');
     let whole_text = parts.next().unwrap_or("0");
@@ -39,7 +39,6 @@ pub fn parse_near(text: &str) -> anyhow::Result<Yocto> {
     if parts.next().is_some() {
         anyhow::bail!("montant invalide : {trimmed}");
     }
-
     let whole: u128 = if whole_text.is_empty() {
         0
     } else {
@@ -48,8 +47,8 @@ pub fn parse_near(text: &str) -> anyhow::Result<Yocto> {
             .map_err(|_| anyhow::anyhow!("montant invalide : {trimmed}"))?
     };
     let mut frac = frac_text.to_string();
-    frac.truncate(24);
-    while frac.len() < 24 {
+    frac.truncate(decimals as usize);
+    while frac.len() < decimals as usize {
         frac.push('0');
     }
     let frac: u128 = if frac.is_empty() {
@@ -58,7 +57,12 @@ pub fn parse_near(text: &str) -> anyhow::Result<Yocto> {
         frac.parse()
             .map_err(|_| anyhow::anyhow!("montant invalide : {trimmed}"))?
     };
-    Ok(whole * 10u128.pow(24) + frac)
+    Ok(whole * 10u128.pow(decimals) + frac)
+}
+
+/// Convertit un montant NEAR décimal en yoctoNEAR (1 NEAR = 10^24 yocto).
+pub fn parse_near(text: &str) -> anyhow::Result<Yocto> {
+    parse_token_amount(text, 24)
 }
 
 /// Options brutes de la sous-commande `propose`.
@@ -147,7 +151,12 @@ impl ProposeOptions {
             let (token, amount) = raw
                 .split_once(':')
                 .ok_or_else(|| anyhow::anyhow!("--min-in attend <jeton>:<montant>"))?;
-            min_in.push((token.to_string(), parse_near(amount)?));
+            let parsed = if token.to_uppercase() == "TEST" {
+                parse_token_amount(amount, 18)?
+            } else {
+                parse_near(amount)?
+            };
+            min_in.push((token.to_string(), parsed));
         }
 
         Ok(Intent {

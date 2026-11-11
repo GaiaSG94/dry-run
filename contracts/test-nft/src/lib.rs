@@ -1,21 +1,27 @@
-//! NFT minimal (NEP-171 réduit) pour la démonstration.
+//! Contrat NFT minimal pour la démonstration (`test-nft.test.near`).
 //!
-//! Compte déployé : `test-nft.test.near`. Émetteur : `owner.test.near`.
-//! Un seul jeton est utilisé dans la démo : `token_id = "1"`.
+//! Un seul jeton est utilisé : `token_id = "1"`. L'émetteur (`owner_id`) frappe
+//! le jeton et le transfère au coffre. Ensuite, **tout compte** peut demander
+//! une approbation sur ce jeton : c'est volontairement permissif, car c'est
+//! exactement la surface d'attaque que le piège `approver` exploite et que la
+//! règle R3 du pare-feu doit intercepter.
 //!
-//! Règle volontairement permissive pour la démo : **le détenteur courant** du jeton
-//! peut approuver un tiers (`nft_approve`). C'est ce qui permet à `trap-approver`
-//! de faire approuver `mallory.test.near` quand le coffre détient le jeton.
-//!
-//! Les événements sont publiés au format NEP-297 / NEP-171 sur une seule ligne :
-//! `EVENT_JSON:{"standard":"nep171","version":"1.0.0","event":"nft_approve","data":[...]}`
-//! ce qui permet au simulateur (`dryrun-sim`) de les reconnaître.
+//! Les événements sont publiés sur une ligne lisible par le simulateur :
+//! `nft_approve collection:<compte> token_id:<id> to:<compte>`.
 
-use near_sdk::json_types::U128;
 use near_sdk::store::LookupMap;
-use near_sdk::{env, near, serde_json, AccountId, PanicOnDefault};
+use near_sdk::{env, near, AccountId, PanicOnDefault};
 
-/// Version du standard annoncée dans les événements.
+/// Comptes dont l'approbation peut être révoquée (liste courte de démo).
+const APPROVAL_CANDIDATES: &[&str] = &[
+    "mallory.test.near",
+    "bob.test.near",
+    "approver.test.near",
+    "vault.test.near",
+    "owner.test.near",
+];
+
+/// Version du standard annoncée dans les métadonnées.
 const NFT_STANDARD: &str = "nep171";
 const NFT_VERSION: &str = "1.0.0";
 
@@ -23,25 +29,20 @@ const NFT_VERSION: &str = "1.0.0";
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
 pub struct TestNft {
+    /// Compte autorisé à frapper des jetons.
     owner_id: AccountId,
-    /// Jeton → détenteur courant.
+    /// Propriétaire courant de chaque jeton.
     owners: LookupMap<String, AccountId>,
-    /// (jeton, compte approuvé) → approuvé ou non.
+    /// Approbations en cours : (jeton, compte) → vrai.
     approvals: LookupMap<(String, AccountId), bool>,
 }
 
-/// Publie un événement NEP-297 sur une seule ligne.
-fn emit(event: &str, data: serde_json::Value) {
-    let payload = serde_json::json!({
-        "standard": NFT_STANDARD,
-        "version": NFT_VERSION,
-        "event": event,
-        "data": data,
-    });
-    match serde_json::to_string(&payload) {
-        Ok(line) => env::log_str(&format!("EVENT_JSON:{}", line)),
-        Err(_) => env::log_str("EVENT_JSON:{}"),
-    }
+/// Métadonnées NEP-171.
+#[near(serializers = [json])]
+pub struct NftMetadata {
+    pub spec: String,
+    pub name: String,
+    pub symbol: String,
 }
 
 #[near]
@@ -61,17 +62,16 @@ impl TestNft {
         if env::predecessor_account_id() != self.owner_id {
             env::panic_str("Seul l'emetteur peut frapper un jeton");
         }
-        if self.owners.contains_key(&token_id) {
-            env::panic_str("Jeton deja frappe");
-        }
         self.owners.insert(token_id.clone(), to.clone());
-        emit(
-            "nft_mint",
-            serde_json::json!([{ "token_id": token_id, "owner_id": to }]),
-        );
+        env::log_str(&format!(
+            "nft_transfer collection:{} token_id:{} to:{}",
+            env::current_account_id(),
+            token_id,
+            to
+        ));
     }
 
-    /// Transfert du jeton par son détenteur courant.
+    /// Transfert d'un jeton par son détenteur courant (1 yocto de courtoisie).
     #[payable]
     pub fn nft_transfer(&mut self, to: AccountId, token_id: String) {
         let caller = env::predecessor_account_id();
@@ -80,40 +80,45 @@ impl TestNft {
             env::panic_str("Seul le detenteur peut transferer ce jeton");
         }
         self.owners.insert(token_id.clone(), to.clone());
-        emit(
-            "nft_transfer",
-            serde_json::json!([{ "token_id": token_id, "old_owner_id": holder, "new_owner_id": to }]),
-        );
+        // Un transfert révoque les approbations en cours.
+        self.clear_approvals(&token_id);
+        env::log_str(&format!(
+            "nft_transfer collection:{} token_id:{} to:{}",
+            env::current_account_id(),
+            token_id,
+            to
+        ));
     }
 
-    /// Approbation d'un tiers par le détenteur courant (1 yocto de courtoisie accepté).
+    /// Approbation d'un tiers.
+    ///
+    /// Volontairement permissif pour la démonstration : le détenteur **ou**
+    /// n'importe quel compte peut demander une approbation. C'est la surface
+    /// d'attaque que le piège `approver` exploite et que R3 doit intercepter.
     #[payable]
     pub fn nft_approve(&mut self, to: AccountId, token_id: String) {
-        let caller = env::predecessor_account_id();
-        let holder = self.holder(&token_id);
-        if holder != caller {
-            env::panic_str("Seul le detenteur peut approuver ce jeton");
+        if to == env::predecessor_account_id() {
+            // S'approuver soi-même n'a pas de sens : on ignore.
+            return;
         }
         self.approvals.insert((token_id.clone(), to.clone()), true);
-        emit(
-            "nft_approve",
-            serde_json::json!([{
-                "token_id": token_id,
-                "owner_id": holder,
-                "approved_account_id": to,
-            }]),
-        );
+        env::log_str(&format!(
+            "nft_approve collection:{} token_id:{} to:{}",
+            env::current_account_id(),
+            token_id,
+            to
+        ));
     }
 
-    /// Révoque une approbation.
+    /// Révoque une approbation (détenteur seulement).
     pub fn nft_revoke(&mut self, to: AccountId, token_id: String) {
         if self.holder(&token_id) != env::predecessor_account_id() {
-            env::panic_str("Seul le detenteur peut revoquer une approbation");
+            env::panic_str("Seul le detenteur peut revoquer");
         }
-        self.approvals.insert((token_id, to), false);
+        self.approvals.remove(&(token_id, to));
     }
 
-    /// Le compte `to` est-il approuvé pour ce jeton ?
+    /// Le compte est-il approuvé pour ce jeton ?
     pub fn nft_is_approved(&self, to: AccountId, token_id: String) -> bool {
         self.approvals
             .get(&(token_id, to))
@@ -121,36 +126,39 @@ impl TestNft {
             .unwrap_or(false)
     }
 
-    /// Détenteur courant d'un jeton.
+    /// Détenteur courant du jeton.
     pub fn nft_owner_of(&self, token_id: String) -> AccountId {
         self.holder(&token_id)
     }
 
-    /// Émetteur de la collection.
-    pub fn nft_owner_id(&self) -> AccountId {
-        self.owner_id.clone()
+    /// Métadonnées de la collection.
+    pub fn nft_metadata(&self) -> NftMetadata {
+        NftMetadata {
+            spec: format!("{NFT_STANDARD}-{NFT_VERSION}"),
+            name: "Dry Run Demo NFT".to_string(),
+            symbol: "DRYNFT".to_string(),
+        }
     }
+}
 
-    /// Métadonnées NEP-171 minimales.
-    pub fn nft_metadata(&self) -> serde_json::Value {
-        serde_json::json!({
-            "spec": "nft-1.1.0",
-            "name": "Dry Run NFT",
-            "symbol": "DRNFT",
-            "decimals": 0,
-            "base_uri": "",
-            "icon": null,
-            "reference": null,
-            "reference_hash": null,
-            "royalty": U128(0),
-        })
-    }
-
-    /// Lecture du détenteur, avec panique si le jeton n'existe pas.
+impl TestNft {
+    /// Détenteur courant, ou panique si le jeton n'existe pas.
     fn holder(&self, token_id: &str) -> AccountId {
         match self.owners.get(token_id).cloned() {
             Some(account) => account,
             None => env::panic_str("Jeton inconnu"),
+        }
+    }
+
+    /// Supprime les approbations connues d'un jeton.
+    ///
+    /// `LookupMap` ne s'itère pas : on ne révoque que les approbations vues
+    /// (suffisant pour la démonstration, où un seul jeton circule).
+    fn clear_approvals(&mut self, token_id: &str) {
+        for candidat in APPROVAL_CANDIDATES {
+            if let Ok(compte) = candidat.parse::<AccountId>() {
+                self.approvals.remove(&(token_id.to_string(), compte));
+            }
         }
     }
 }
@@ -162,10 +170,7 @@ mod tests {
     use near_sdk::testing_env;
 
     fn id(name: &str) -> AccountId {
-        match name.parse() {
-            Ok(a) => a,
-            Err(_) => panic!("compte de test invalide"),
-        }
+        name.parse().expect("compte valide")
     }
 
     fn contexte(signer: &str) {
@@ -177,7 +182,6 @@ mod tests {
         testing_env!(ctx);
     }
 
-    /// Collection avec le jeton `1` détenu par `vault.test.near`.
     fn collection() -> TestNft {
         contexte("owner.test.near");
         let mut nft = TestNft::new(id("owner.test.near"));
@@ -186,37 +190,47 @@ mod tests {
     }
 
     #[test]
-    fn frappe_et_transfert() {
+    fn emission_reservee_a_emetteur() {
         let mut nft = collection();
-        assert_eq!(nft.nft_owner_of("1".to_string()), id("vault.test.near"));
-
-        contexte("vault.test.near");
-        nft.nft_transfer(id("bob.test.near"), "1".to_string());
-        assert_eq!(nft.nft_owner_of("1".to_string()), id("bob.test.near"));
+        contexte("mallory.test.near");
+        let resultat = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            nft.mint_to(id("mallory.test.near"), "2".to_string())
+        }));
+        assert!(resultat.is_err());
     }
 
     #[test]
-    fn le_detenteur_approuve_un_tiers() {
+    fn approbation_par_un_tiers_est_possible() {
         let mut nft = collection();
-        contexte("vault.test.near");
-        assert!(!nft.nft_is_approved(id("mallory.test.near"), "1".to_string()));
+        contexte("approver.test.near");
         nft.nft_approve(id("mallory.test.near"), "1".to_string());
         assert!(nft.nft_is_approved(id("mallory.test.near"), "1".to_string()));
     }
 
     #[test]
-    #[should_panic(expected = "Seul le detenteur peut approuver")]
-    fn approbation_refusee_hors_detenteur() {
+    fn approbation_vers_soi_meme_est_ignoree() {
         let mut nft = collection();
         contexte("mallory.test.near");
         nft.nft_approve(id("mallory.test.near"), "1".to_string());
+        assert!(!nft.nft_is_approved(id("mallory.test.near"), "1".to_string()));
     }
 
     #[test]
-    #[should_panic(expected = "Seul l'emetteur")]
-    fn frappe_refusee_hors_emetteur() {
+    fn transfert_reserve_au_detenteur() {
         let mut nft = collection();
         contexte("mallory.test.near");
-        nft.mint_to(id("mallory.test.near"), "2".to_string());
+        let resultat = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            nft.nft_transfer(id("mallory.test.near"), "1".to_string())
+        }));
+        assert!(resultat.is_err());
+    }
+
+    #[test]
+    fn metadonnées_exposent_le_standard() {
+        let nft = collection();
+        let meta = nft.nft_metadata();
+        assert!(meta.spec.starts_with("nep171"));
+        assert_eq!(meta.symbol, "DRYNFT");
+        let _ = near_sdk::serde_json::to_string(&meta).expect("sérialisable");
     }
 }

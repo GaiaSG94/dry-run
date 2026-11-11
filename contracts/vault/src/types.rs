@@ -65,9 +65,9 @@ impl VaultAction {
 
     /// Forme canonique de l'action, identique à celle calculée par le simulateur.
     ///
-    /// C'est cette représentation qui est condensée dans le certificat : les
-    /// deux côtés (garde-barrière et contrat) construisent le même objet.
-    pub fn canonical_json(&self) -> serde_json::Value {
+    /// C'est cette chaîne qui est condensée dans le certificat : les deux
+    /// côtés (garde-barrière et contrat) construisent exactement la même.
+    pub fn canonical(&self) -> String {
         match self {
             VaultAction::Transfer {
                 receiver_id,

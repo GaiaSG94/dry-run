@@ -140,6 +140,19 @@ impl Simulator {
         self.inner.freeze().await.map(|_| ())
     }
 
+    /// Appel d'une méthode par le propriétaire (geste du propriétaire).
+    pub async fn owner_call(
+        &self,
+        contract: &str,
+        method: &str,
+        args: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.inner
+            .owner_call(contract, method, args)
+            .await
+            .map(|_| ())
+    }
+
     /// Approuve un contrat (action du propriétaire, 1 yoctoNEAR).
     ///
     /// L'empreinte du code est lue sur la chaîne par le simulateur : c'est

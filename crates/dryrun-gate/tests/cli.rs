@@ -91,7 +91,8 @@ fn propose_appel_construit_la_demande() {
             }
             assert_eq!(intent.min_in.len(), 1);
             assert_eq!(intent.min_in[0].0, "TEST");
-            assert_eq!(intent.min_in[0].1, 19 * 10u128.pow(23));
+            // TEST a 18 décimales : 1.9 TEST = 19 * 10^17
+            assert_eq!(intent.min_in[0].1, 19 * 10u128.pow(17));
         }
         other => panic!("commande inattendue : {other:?}"),
     }

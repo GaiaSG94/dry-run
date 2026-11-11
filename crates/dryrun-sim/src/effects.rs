@@ -323,25 +323,24 @@ fn code_events(before: &SnapshotSet, after: &SnapshotSet) -> Vec<CodeEvent> {
     out
 }
 
-/// Vrai si un reçu a échoué alors que des fonds étaient déjà sortis.
+/// Vrai si un reçu a échoué alors que des fonds étaient déjà sortis du coffre.
 ///
-/// On ne compte pas le simple `delta < 0` du coffre : les frais de gas en font
-/// toujours partie. Un « stranded » suppose qu'un **tiers** a effectivement
-/// gagné des fonds pendant qu'un autre reçu échouait (typiquement `half-step`).
-fn is_stranded(_before: &SnapshotSet, _after: &SnapshotSet, receipts: &[ReceiptInfo]) -> bool {
+/// C'est exactement le cas `half-step` : le dépôt est encaissé, puis le reçu
+/// suivant échoue. Comme NEAR n'annule pas les reçus déjà exécutés, l'argent
+/// reste coincé chez le contrat appelé.
+fn is_stranded(before: &SnapshotSet, after: &SnapshotSet, receipts: &[ReceiptInfo]) -> bool {
     let failure = receipts.iter().any(|receipt| receipt.status == "failed");
     if !failure {
         return false;
     }
-    let gained =
-        |account: &str| !accounts::FEE_ACCOUNTS.contains(&account) && account != accounts::VAULT;
-    let near_gain = near_deltas(_before, _after)
+    // Sortie nette du coffre hors frais de gas : au moins 1 milli-NEAR.
+    let dust = 10u128.pow(21);
+    let vault_out = near_deltas(before, after)
         .iter()
-        .any(|delta| delta.delta > 0 && gained(&delta.account));
-    let ft_gain = ft_deltas(_before, _after)
-        .iter()
-        .any(|delta| delta.delta > 0);
-    near_gain || ft_gain
+        .find(|delta| delta.account == accounts::VAULT)
+        .map(|delta| delta.delta)
+        .unwrap_or(0);
+    vault_out < 0 && vault_out.unsigned_abs() > dust
 }
 
 /// Coût du stockage gagné par le coffre pendant la transaction, en yoctoNEAR.

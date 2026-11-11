@@ -68,6 +68,11 @@ pub fn parse(outcome: &FinalExecutionOutcomeView) -> Execution {
         .map(|receipt| {
             logs.extend(receipt.outcome.logs.iter().cloned());
             gas_burnt += receipt.outcome.gas_burnt.as_gas();
+            // Le message d'échec d'un reçu porte souvent la vraie cause
+            // (panique du contrat, dépassement de gas) : on le garde.
+            if let ExecutionStatusView::Failure(error) = &receipt.outcome.status {
+                logs.push(format!("RECEIPT_ERROR: {error:?}"));
+            }
             ReceiptInfo {
                 id: receipt.id.to_string(),
                 status: status_name(&receipt.outcome.status).to_string(),

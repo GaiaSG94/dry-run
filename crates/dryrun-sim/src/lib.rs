@@ -43,7 +43,9 @@ pub use sim::{Replay, SimSandbox};
 pub use vault_api::VaultStatus;
 
 /// Gaz maximum d'un appel `execute` (la clé d'agent ne peut rien faire d'autre).
-pub const EXECUTE_GAS: u64 = 100_000_000_000_000;
+/// Gaz attaché à l'appel `execute` : il doit couvrir l'appel visé **et** la
+/// chaîne de rappels du coffre (`on_done`, lecture du solde, `on_post_check`).
+pub const EXECUTE_GAS: u64 = 300_000_000_000_000;
 
 /// Fraîcheur d'un certificat, en blocs (vingt blocs, comme l'instantané).
 pub const CERT_FRESHNESS_BLOCKS: u64 = 20;
@@ -141,6 +143,13 @@ impl Simulator {
 
     /// Simule une demande et rend la décision complète.
     pub async fn simulate(&self, demand: &Demande, intent: &Intent) -> Result<Decision> {
+        // Un coffre gelé bloque tout : inutile de jouer la transaction, le
+        // verdict est connu d'avance (règle de gel, section 6 du cahier).
+        if let Ok(status) = vault_api::status(&self.chain).await {
+            if status.frozen() {
+                return Ok(frozen_decision());
+            }
+        }
         let replay = sim::replay(&self.chain, demand, intent).await?;
         let ctx = self.rule_ctx(demand, intent, &replay.effects).await?;
         Ok(decide(&ctx, &replay.effects))
@@ -187,6 +196,47 @@ impl Simulator {
             last = Some(outcome);
         }
         Ok(last.unwrap_or_default())
+    }
+
+    /// Accès à la chaîne locale (débogage, appels directs du propriétaire).
+    pub fn chain(&self) -> &Chain {
+        &self.chain
+    }
+
+    /// Appel d'une méthode par le propriétaire (geste du propriétaire).
+    pub async fn owner_call(
+        &self,
+        contract: &str,
+        method: &str,
+        args: &serde_json::Value,
+    ) -> Result<ExecOutcome> {
+        let outcome = self
+            .chain
+            .call(accounts::OWNER, contract, method, args, 0, EXECUTE_GAS)
+            .await?;
+        Ok(ExecOutcome::from(outcome))
+    }
+
+    /// Appel direct depuis le propriétaire (débogage des contrats de démo).
+    pub async fn call_debug(
+        &self,
+        receiver: &str,
+        method: &str,
+        args: &serde_json::Value,
+        deposit: u128,
+    ) -> Result<ExecOutcome> {
+        let outcome = self
+            .chain
+            .call(
+                accounts::OWNER,
+                receiver,
+                method,
+                args,
+                deposit,
+                EXECUTE_GAS,
+            )
+            .await?;
+        Ok(ExecOutcome::from(outcome))
     }
 
     /// Clé publique du simulateur (hexadécimal), à enregistrer dans le coffre.
@@ -360,6 +410,10 @@ impl Simulator {
             tx_cap,
             daily_cap,
             daily_spent,
+            instrument_accounts: accounts::INSTRUMENTS
+                .iter()
+                .map(|name| name.to_string())
+                .collect(),
             fee_accounts: accounts::FEE_ACCOUNTS
                 .iter()
                 .map(|name| name.to_string())
@@ -401,6 +455,20 @@ impl Simulator {
 /// Point d'entrée unique du jugement : le simulateur ne juge jamais lui-même.
 pub fn decide(ctx: &RuleCtx, effects: &Effects) -> Decision {
     dryrun_core::judge(ctx, effects)
+}
+
+/// Décision de refus quand le coffre est gelé : rien n'est simulé.
+pub fn frozen_decision() -> Decision {
+    Decision {
+        verdict: Verdict::Block,
+        rules: vec![dryrun_core::types::RuleHit {
+            id: "GEL".into(),
+            title: "coffre gelé".into(),
+            detail: "le coffre est gelé : aucune sortie n'est possible (ERR_FROZEN)".into(),
+            severity: Verdict::Block,
+        }],
+        effects: Effects::default(),
+    }
 }
 
 /// Verdict en une ligne, pour les journaux et la CLI.

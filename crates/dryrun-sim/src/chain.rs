@@ -349,6 +349,16 @@ impl Chain {
         )
         .await?;
 
+        // 8. Le coffre est autorisé à approuver ses propres NFT : c'est ce que
+        //    ferait un wallet classique, et c'est ce que le piège exploite.
+        self.try_call(
+            accounts::VAULT,
+            accounts::TEST_NFT,
+            "nft_approve",
+            &json!({ "to": accounts::VAULT, "token_id": "1" }),
+        )
+        .await?;
+
         Ok(())
     }
 

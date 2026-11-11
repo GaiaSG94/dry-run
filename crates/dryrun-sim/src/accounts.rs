@@ -102,13 +102,24 @@ pub const GENESIS_ACCOUNTS: &[&str] = &[
     "liar.test.near",
     "approver.test.near",
     "shapeshifter.test.near",
+    GHOST,
 ];
+
+/// Compte inexistant appelé par `half-step` : le reçu échoue, les fonds restent.
+pub const GHOST: &str = "ghost.test.near";
+
+/// Comptes vides à créer dans le bac à sable de simulation : une transaction
+/// peut les viser sans qu'ils existent sur la chaîne (pièges, comptes fantômes).
+pub const EMPTY_ACCOUNTS: &[&str] = &[GHOST];
 
 /// Comptes « froids » répliqués dans le bac à sable de simulation pour lire les deltas.
 pub const WATCHED_PLAIN: &[&str] = &[BOB, MALLORY, NFT_HOLDER, OWNER];
 
 /// Comptes de frais (jamais des bénéficiaires).
 pub const FEE_ACCOUNTS: &[&str] = &["near", ROOT];
+
+/// Comptes d'instruments (registres de jetons et DEX).
+pub const INSTRUMENTS: &[&str] = &[TEST_TOKEN, TEST_NFT, "good-dex.test.near"];
 
 /// Cherche le wasm d'un contrat ; accepte les tirets et les underscores.
 pub fn wasm_path(dir: &Path, name: &str) -> Option<PathBuf> {

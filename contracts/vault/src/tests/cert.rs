@@ -10,7 +10,7 @@ fn fixture() -> Fixture {
 }
 
 fn make_dummy_cert(action: &VaultAction, height: u64, nonce: u64) -> SignedCert {
-    let digest = Cert::digest_of(&action.canonical_json());
+    let digest = Cert::digest_of(&action.canonical());
 
     SignedCert {
         cert: Cert {

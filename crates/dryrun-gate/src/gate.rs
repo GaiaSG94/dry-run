@@ -177,9 +177,14 @@ impl Gatekeeper {
         decision: &dryrun_core::types::Decision,
     ) -> (bool, String, Option<CertView>) {
         let post = post_conditions(intent);
-        let cert = self.sim.sign_cert(demand, &decision.effects, post).await;
-        let cert_view = cert.as_ref().ok().map(CertView::from);
-        let signed = cert.as_ref().ok();
+        let cert = match self.sim.sign_cert(demand, &decision.effects, post).await {
+            Ok(cert) => cert,
+            Err(err) => {
+                return (false, format!("Certificat non signé : {err}"), None);
+            }
+        };
+        let cert_view = Some(CertView::from(&cert));
+        let signed = Some(&cert);
 
         match self.sim.execute_with_cert(demand, signed).await {
             Ok(outcome) => {
@@ -209,6 +214,16 @@ impl Gatekeeper {
     pub async fn install_sim_key(&self) -> anyhow::Result<String> {
         self.sim.install_sim_key().await?;
         Ok(self.sim.sim_public_key())
+    }
+
+    /// Appel d'une méthode par le propriétaire (geste du propriétaire).
+    pub async fn owner_call(
+        &self,
+        contract: &str,
+        method: &str,
+        args: &serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.sim.owner_call(contract, method, args).await
     }
 
     /// Clé publique du simulateur (hexadécimal).
@@ -270,6 +285,13 @@ impl Gatekeeper {
         self.sim.vault_status().await
     }
 
+    /// Contrats connus du coffre (compte → empreinte approuvée).
+    pub async fn known_contracts(
+        &self,
+    ) -> anyhow::Result<std::collections::BTreeMap<String, String>> {
+        self.sim.known_contracts().await
+    }
+
     /// Enregistre un contrat connu (action réservée au propriétaire).
     pub async fn approve_contract(&self, account: &str, code_hash: &str) -> anyhow::Result<()> {
         self.sim.approve_contract(account, code_hash).await
@@ -280,8 +302,11 @@ impl Gatekeeper {
         self.journal.entries()
     }
 
-    /// Appel direct du coffre avec la clé de l'agent, **sans** passer par le
-    /// simulateur ni joindre de certificat (simule un vol de clé d'agent).
+    /// Appel direct du coffre avec la clé de l'agent, **sans** certificat.
+    ///
+    /// C'est le scénario du vol de clé : le voleur contourne le garde-barrière.
+    /// Au niveau V1 le coffre refuse (`ERR_NO_CERT`) ; sans certificat activé,
+    /// seuls les plafonds on-chain le bornent.
     pub async fn execute_without_firewall(
         &self,
         demand: &Demande,

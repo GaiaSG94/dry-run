@@ -6,6 +6,7 @@
 mod auth;
 mod caps;
 mod cert;
+mod digest;
 mod events;
 mod freeze;
 mod known;

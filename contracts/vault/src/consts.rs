@@ -47,3 +47,6 @@ pub const CALLBACK_GAS_TGAS: u64 = 10;
 pub const CALLBACK_RESULT_MAX: usize = 1_024;
 /// Dépôt exigé par les actions du propriétaire : 1 yoctoNEAR.
 pub const ONE_YOCTO: u128 = 1;
+
+/// Gas laissé à la lecture du solde de jeton pour le contrôle au retour (V1).
+pub const POST_CHECK_GAS_TGAS: u64 = 10;

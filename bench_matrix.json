@@ -10,6 +10,6 @@
   "recall": 1.0,
   "f1_score": 1.0,
   "median_latency_us": 0,
-  "p95_latency_us": 2,
+  "p95_latency_us": 1,
   "missed": []
 }

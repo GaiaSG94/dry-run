@@ -144,7 +144,6 @@ impl Vault {
             self.verify_certificate(&action, signed_cert, &expected_sim_key);
         }
 
-        let post_first = cert.as_ref().and_then(|c| c.cert.post.first().cloned());
         let hour = env::block_timestamp() / HOUR_NS;
         if let Err(reason) = self.evaluate(&action, hour) {
             events::refused(reason);
@@ -153,7 +152,7 @@ impl Vault {
         let op = self.count_spend(&action, hour);
         self.note("executed", Some(action.receiver()), action.amount(), None);
         events::executed(action.kind(), action.receiver(), action.amount());
-        self.send(action, op, post_first)
+        self.send(action, op)
     }
 
     /// Vérifie la validité cryptographique et métier du certificat de simulation.
@@ -175,7 +174,7 @@ impl Vault {
         }
         self.used_nonces.insert(nonce);
 
-        let canonical = action.canonical_json();
+        let canonical = action.canonical();
         let action_digest = dryrun_core::types::Cert::digest_of(&canonical);
         if cert.call_digest != action_digest {
             events::refused(ERR_CERT_MISMATCH);
@@ -343,9 +342,27 @@ impl Vault {
         self.hostile.contains(&account_id)
     }
 
+    /// Réception NEP-141 : le coffre accepte les jetons mais n'en rend aucun.
+    ///
+    /// Sans cette méthode, un transfert de jeton vers le coffre échouerait
+    /// (« method not found ») et le DEX confidentiel ne pourrait pas livrer.
+    #[payable]
+    pub fn ft_on_transfer(&mut self, sender_id: AccountId, amount: U128, _msg: String) -> U128 {
+        self.note("ft_received", Some(&sender_id), amount.0, None);
+        U128(0)
+    }
+
     /// Clé publique du simulateur configurée.
     pub fn sim_key(&self) -> Option<String> {
         self.sim_key.clone()
+    }
+
+    /// Condensé SHA-256 d'une action, tel que le certificat le contiendra.
+    ///
+    /// Cette vue permet de vérifier, depuis l'extérieur, que le simulateur et
+    /// le coffre condensent **exactement** la même demande.
+    pub fn digest_of(&self, action: VaultAction) -> String {
+        dryrun_core::types::Cert::digest_of(&action.canonical())
     }
 
     /// Contrôle les règles on-chain seules, sans rien exécuter.
@@ -381,17 +398,6 @@ impl Vault {
             None,
         );
         events::postcondition_failed(&pending.kind, &pending.receiver, pending.amount);
-
-        // Au niveau V1 : une sortie de fonds dont l'appel échoue gèle le coffre et
-        // marque le contrat hostile (fonds déjà partis, attaque stoppée net).
-        if pending.kind == "call" && pending.amount > 0 {
-            self.frozen = true;
-            self.frozen_at = env::block_timestamp();
-            self.hostile.insert(pending.receiver.clone());
-            events::frozen(self.frozen_at);
-            events::hostile_marked(&pending.receiver, "postcondition_failed_on_done");
-        }
-
         false
     }
 
@@ -417,12 +423,8 @@ impl Vault {
             self.note("postcheck_ok", Some(&token), got, None);
             return;
         }
-        self.frozen = true;
-        self.frozen_at = env::block_timestamp();
-        self.hostile.insert(target.clone());
+        self.freeze_now("postcondition_min_in_not_met", &target);
         self.note("postcondition_failed", Some(&target), got, Some("min_in"));
-        events::frozen(self.frozen_at);
-        events::hostile_marked(&target, "postcondition_min_in_not_met");
         let _ = op;
     }
 }
@@ -454,6 +456,18 @@ impl Vault {
     fn require_one_yocto(&self) {
         if env::attached_deposit() != NearToken::from_yoctonear(ONE_YOCTO) {
             env::panic_str(ERR_ONE_YOCTO);
+        }
+    }
+
+    /// Gèle le coffre et marque un contrat hostile (chemin V1, contrôle au retour).
+    fn freeze_now(&mut self, reason: &str, hostile_account: &AccountId) {
+        if !self.frozen {
+            self.frozen = true;
+            self.frozen_at = env::block_timestamp();
+            events::frozen(self.frozen_at);
+        }
+        if self.hostile.insert(hostile_account.clone()) {
+            events::hostile_marked(hostile_account, reason);
         }
     }
 
@@ -492,20 +506,11 @@ impl Vault {
     }
 
     /// Construit la promesse sortante, suivie du rappel `on_done`.
-    fn send(&self, action: VaultAction, op: u64, post: Option<(String, u128)>) -> Promise {
-        let current = env::current_account_id();
-        let target = action.receiver().clone();
-        let mut callback = ext_contract::self_contract::ext(current.clone())
+    /// Construit la promesse sortante, suivie du rappel `on_done`.
+    fn send(&self, action: VaultAction, op: u64) -> Promise {
+        let callback = ext_contract::self_contract::ext(env::current_account_id())
             .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
             .on_done(U128(op.into()));
-        if let Some((token, min)) = post {
-            if let Ok(token_acc) = token.parse::<AccountId>() {
-                let check_promise = ext_contract::self_contract::ext(current)
-                    .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
-                    .on_post_check(U128(op.into()), token_acc, U128(min), target);
-                callback = callback.then(check_promise);
-            }
-        }
         match action {
             VaultAction::Transfer {
                 receiver_id,

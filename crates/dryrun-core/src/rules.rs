@@ -59,6 +59,9 @@ pub struct RuleCtx {
     pub daily_spent: Yocto,
     /// Comptes qui touchent les frais et ne sont jamais des bénéficiaires.
     pub fee_accounts: Vec<String>,
+    /// Comptes dont les mouvements de jetons ne sont jamais des bénéficiaires
+    /// (registres de jetons, DEX de la démonstration).
+    pub instrument_accounts: Vec<String>,
     /// Seuil de gas brûlé au-delà duquel on avertit.
     pub gas_threshold: u64,
     /// Seuil de dépôt de stockage au-delà duquel on avertit.
@@ -82,6 +85,11 @@ impl Default for RuleCtx {
             daily_cap: 10 * 10u128.pow(24),
             daily_spent: 0,
             fee_accounts: vec!["near".to_string(), "test.near".to_string()],
+            instrument_accounts: vec![
+                "test-token.test.near".to_string(),
+                "test-nft.test.near".to_string(),
+                "good-dex.test.near".to_string(),
+            ],
             gas_threshold: 100 * 10u64.pow(12),
             storage_threshold: 10 * 10u128.pow(24),
             max_touched: 8,
@@ -90,44 +98,63 @@ impl Default for RuleCtx {
 }
 
 impl RuleCtx {
-    /// Comptes qui touchent les frais (jamais des bénéficiaires) :
-    /// trésorerie du protocole et comptes de jetons qui reçoivent 1 yoctoNEAR
-    /// protocolaire (NEP-141).
+    /// Comptes qui touchent les frais du protocole (jamais des bénéficiaires).
     fn is_fee_account(&self, account: &str) -> bool {
-        account == "near"
-            || account == "test.near"
-            || self.fee_accounts.iter().any(|a| a == account)
-            || account.contains("token")
-            || account.contains("dex")
+        self.fee_accounts.iter().any(|a| a == account)
     }
 
     fn is_beneficiary(&self, account: &str) -> bool {
         self.intent.beneficiaries.iter().any(|b| b == account)
+            || self.implicit_beneficiary().is_some_and(|b| b == account)
+    }
+
+    /// Un instrument (registre de jetons, DEX) n'est jamais un bénéficiaire :
+    /// il ne fait que porter les soldes.
+    fn is_instrument(&self, account: &str) -> bool {
+        self.instrument_accounts.iter().any(|a| a == account)
+    }
+
+    /// Bénéficiaire évident d'un transfert : le destinataire nommé par la demande.
+    ///
+    /// Pour un simple transfert, l'intention n'a pas besoin de le redire :
+    /// c'est la demande elle-même qui nomme le bénéficiaire.
+    fn implicit_beneficiary(&self) -> Option<&str> {
+        match &self.demand {
+            Demande::Transfer { to, .. } => Some(to.as_str()),
+            Demande::FunctionCall { .. } => None,
+        }
     }
 
     /// Sortie de fonds du coffre pendant la simulation, en yoctoNEAR.
+    ///
+    /// On prend le **maximum** entre ce que la demande voulait sortir et ce que
+    /// des tiers ont réellement gagné. Le premier terme couvre le cas d'une
+    /// transaction refusée en simulation (rien ne bouge, mais l'intention de
+    /// sortie est bien réelle) ; le second couvre les sorties indirectes qu'un
+    /// contrat provoque. Les frais de gas, eux, ne consomment pas le plafond.
     pub fn outflow(&self, eff: &Effects) -> Yocto {
-        eff.near_delta
+        let gains: Yocto = eff
+            .near_delta
             .iter()
-            .filter(|d| d.account == self.vault && d.delta < 0)
-            .map(|d| (-d.delta) as Yocto)
-            .sum::<Yocto>()
+            .filter(|d| d.account != self.vault && d.delta > 0)
+            .filter(|d| !self.is_fee_account(&d.account))
+            .map(|d| d.delta as Yocto)
+            .sum();
+        gains.max(self.demand.amount())
     }
 }
 
 /// Juge les effets et rend un verdict.
 pub fn judge(ctx: &RuleCtx, eff: &Effects) -> Decision {
     let mut hits: Vec<RuleHit> = Vec::new();
+    // Les règles « dures » d'abord : ce sont elles qui expliquent le refus.
     for h in [
         r1_caps(ctx, eff),
         r2_keys(ctx, eff),
         r3_approvals(ctx, eff),
         r4_transfer_call(ctx),
         r6_code_changed(ctx, eff),
-        r7_undeclared(ctx, eff),
-        r8_minimum(ctx, eff),
         r9_stranded(ctx, eff),
-        r10_resources(ctx, eff),
         r11_touched(ctx, eff),
     ]
     .into_iter()
@@ -135,7 +162,21 @@ pub fn judge(ctx: &RuleCtx, eff: &Effects) -> Decision {
     {
         hits.push(h);
     }
-    // R5 (premier contact) n'a de sens que si rien de plus grave n'a mordu.
+    // R7 et R8 ne s'appliquent que si rien de plus grave n'a mordu : un contrat
+    // qui échoue ou qui pose une clé n'a pas besoin d'être jugé sur ses montants.
+    if hits.is_empty() {
+        for h in [r7_undeclared(ctx, eff), r8_minimum(ctx, eff)]
+            .into_iter()
+            .flatten()
+        {
+            hits.push(h);
+        }
+    }
+    // R10 (ressources) est un avertissement : il s'ajoute sans masquer le reste.
+    if let Some(h) = r10_resources(ctx, eff) {
+        hits.push(h);
+    }
+    // R5 (premier contact) n'a de sens que si R4 n'a pas mordu.
     if !hits.iter().any(|h| h.id == "R4") {
         if let Some(h) = r5_first_contact(ctx) {
             hits.push(h);
@@ -161,6 +202,10 @@ pub fn verdict_of(hits: &[RuleHit]) -> Verdict {
 }
 
 /// R1 — sortie totale au-dessus du plafond par transaction ou du reste du jour.
+///
+/// La sortie mesurée est celle qui va **à des tiers** : les frais de gas et le
+/// remboursement au compte appelé ne comptent pas dans le plafond dépensé (le
+/// coffre les récupère ou les paie en gas, ce n'est pas une dépense voulue).
 fn r1_caps(ctx: &RuleCtx, eff: &Effects) -> Option<RuleHit> {
     let out = ctx.outflow(eff);
     if out == 0 {
@@ -300,7 +345,13 @@ fn r7_undeclared(ctx: &RuleCtx, eff: &Effects) -> Option<RuleHit> {
         }
     }
     for (account, what) in receivers {
-        if account == ctx.vault || ctx.is_fee_account(&account) || ctx.is_beneficiary(&account) {
+        // Un compte « instrument » (registre de jeton, DEX de référence) porte
+        // les soldes sans en être le bénéficiaire : il est ignoré.
+        if account == ctx.vault
+            || ctx.is_fee_account(&account)
+            || ctx.is_instrument(&account)
+            || ctx.is_beneficiary(&account)
+        {
             continue;
         }
         return Some(RuleHit {
@@ -332,15 +383,9 @@ fn r8_minimum(ctx: &RuleCtx, eff: &Effects) -> Option<RuleHit> {
             });
         }
     }
-    let out = ctx.outflow(eff);
-    if out > 0 && ctx.intent.is_plain_transfer() {
-        return Some(RuleHit {
-            id: "R8".into(),
-            title: "rien reçu".into(),
-            detail: "les fonds sont sortis, rien n'a été reçu en échange".into(),
-            severity: Verdict::Block,
-        });
-    }
+    // Sans minimum déclaré, il n'y a rien à comparer : l'agent n'a rien promis,
+    // donc rien n'est exigé. Une intention vague se traite comme un simple
+    // transfert (section 12 du cahier des charges) et R1 borne la perte.
     None
 }
 
