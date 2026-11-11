@@ -121,6 +121,25 @@ impl Gatekeeper {
         &self.sim
     }
 
+    /// Simulation standard du garde-barrière.
+    ///
+    /// Un appel de contrat avec dépôt est joué **deux fois** (montant réel puis
+    /// centième) : la simulation différentielle (R12) fait partie du chemin par
+    /// défaut, pas d'un mode à part. Un simple transfert n'a rien à comparer.
+    async fn simulate_default(
+        &self,
+        demand: &Demande,
+        intent: &Intent,
+    ) -> anyhow::Result<dryrun_core::types::Decision> {
+        match demand {
+            Demande::FunctionCall { deposit, .. } if *deposit > 0 => {
+                let (decision, _report) = self.sim.simulate_differential(demand, intent).await?;
+                Ok(decision)
+            }
+            _ => self.sim.simulate(demand, intent).await,
+        }
+    }
+
     /// Propose une demande avec son intention déclarée.
     ///
     /// `BLOCK` : refus immédiat, rien n'est signé. `WARN` : la décision revient
@@ -128,7 +147,7 @@ impl Gatekeeper {
     /// `ALLOW` : la clé limitée de l'agent signe et la demande est exécutée,
     /// accompagnée de son **certificat de simulation** (niveau V1).
     pub async fn propose(&self, demand: &Demande, intent: &Intent) -> anyhow::Result<Outcome> {
-        let decision = self.sim.simulate(demand, intent).await?;
+        let decision = self.simulate_default(demand, intent).await?;
         let card = format_terminal(&decision, intent);
         let card_view = format_json(&decision, intent);
 

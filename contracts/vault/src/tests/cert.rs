@@ -117,3 +117,56 @@ fn v1_hostile_contract_rejected() {
     }));
     assert!(result.is_err());
 }
+
+#[test]
+fn v1_post_check_gele_et_marque_hostile_si_le_minimum_n_est_pas_atteint() {
+    let mut fx = fixture();
+    // Le contrat a promis 1.9 TEST ; la lecture du solde n'en montre que 1.
+    let solde = serde_json::to_vec(&U128(10u128.pow(18))).unwrap();
+    fx.as_agent();
+    fx.promise_result(near_sdk::PromiseResult::Successful(solde));
+    fx.vault.on_post_check(
+        U128(0),
+        account("test-token.test.near"),
+        U128(19 * 10u128.pow(17)),
+        account("drainer"),
+    );
+
+    assert!(fx.vault.status().frozen, "le coffre doit être gelé");
+    assert!(
+        fx.vault.is_hostile(account("drainer")),
+        "le contrat fautif doit être marqué hostile"
+    );
+}
+
+#[test]
+fn v1_post_check_laisse_passer_si_le_minimum_est_atteint() {
+    let mut fx = fixture();
+    let solde = serde_json::to_vec(&U128(2 * 10u128.pow(18))).unwrap();
+    fx.as_agent();
+    fx.promise_result(near_sdk::PromiseResult::Successful(solde));
+    fx.vault.on_post_check(
+        U128(0),
+        account("test-token.test.near"),
+        U128(19 * 10u128.pow(17)),
+        account("good-dex"),
+    );
+
+    assert!(!fx.vault.status().frozen, "le coffre doit rester ouvert");
+    assert!(!fx.vault.is_hostile(account("good-dex")));
+}
+
+#[test]
+fn v1_post_check_sans_resultat_lisible_ne_gele_pas() {
+    let mut fx = fixture();
+    fx.as_agent();
+    fx.promise_result(near_sdk::PromiseResult::Failed);
+    fx.vault.on_post_check(
+        U128(0),
+        account("test-token.test.near"),
+        U128(19 * 10u128.pow(17)),
+        account("good-dex"),
+    );
+    // En cas de doute sur la lecture, on ne gèle pas : le journal le dit.
+    assert!(!fx.vault.status().frozen);
+}

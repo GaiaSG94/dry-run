@@ -19,7 +19,7 @@ build-contracts:
 	@echo "==> Compilation des contrats WASM..."
 	@$(CARGO) build --target wasm32-unknown-unknown --release -p vault
 	@$(CARGO) build --target wasm32-unknown-unknown --release -p good-dex -p test-token -p test-nft
-	@$(CARGO) build --target wasm32-unknown-unknown --release -p trap-drainer -p trap-skimmer -p trap-half-step -p trap-liar -p trap-approver -p trap-shapeshifter
+	@$(CARGO) build --target wasm32-unknown-unknown --release -p trap-drainer -p trap-skimmer -p trap-half-step -p trap-liar -p trap-approver -p trap-shapeshifter -p trap-two-face
 
 build-tools:
 	@echo "==> Compilation des outils (core, sim, gate)..."

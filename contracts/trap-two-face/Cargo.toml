@@ -1,0 +1,20 @@
+[package]
+name = "trap-two-face"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Piège 7 : contrat à deux visages (honnête sous un seuil, voleur au-dessus)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "trap_two_face"
+path = "src/lib.rs"
+
+[dependencies]
+near-sdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+near-sdk = { workspace = true, features = ["unit-testing"] }

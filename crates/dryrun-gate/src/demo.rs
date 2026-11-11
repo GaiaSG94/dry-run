@@ -14,6 +14,14 @@ const ONE_NEAR: u128 = 10u128.pow(24);
 /// chaîne de rappels du coffre (`on_done`, lecture du solde, `on_post_check`).
 const GAS_APPEL: u64 = 100_000_000_000_000;
 
+/// Contrats que la démonstration fait approuver par le propriétaire (invariant
+/// I3 : aucun autre contrat ne doit apparaître dans `known`).
+const DEMO_CONTRACTS_APPROUVES: &[&str] = &[
+    "good-dex.test.near",
+    "drainer.test.near",
+    "two-face.test.near",
+];
+
 /// Démonstration de bout en bout : honnête, puis attaques, puis gel.
 pub async fn run_demo(gate: &Gatekeeper) -> anyhow::Result<()> {
     headline("Dry Run — démonstration du garde-barrière");
@@ -156,7 +164,37 @@ pub async fn run_demo(gate: &Gatekeeper) -> anyhow::Result<()> {
         &rule_ids(&outcome.rules),
     );
 
-    step(7, "Gel d'un geste, puis nouvelle demande");
+    step(
+        7,
+        "Piège two-face : honnête sous 0,1 NEAR, voleur au-dessus (R12)",
+    );
+    // Le contrat est approuvé par le propriétaire : la liste blanche ne dit rien
+    // de ses deux visages. Seule la simulation différentielle les démasque — la
+    // même demande est jouée au montant réel puis au centième.
+    let deux_visages = Demande::FunctionCall {
+        contract: "two-face.test.near".to_string(),
+        method: "trap".to_string(),
+        args: serde_json::json!(""),
+        deposit: 2 * ONE_NEAR,
+        gas: GAS_APPEL,
+    };
+    let deux_visages_intent = Intent {
+        summary: "échanger 2 NEAR contre au moins 1.9 TEST".to_string(),
+        beneficiaries: vec!["two-face.test.near".to_string()],
+        min_in: vec![("TEST".to_string(), 19 * 10u128.pow(17))],
+        max_out: None,
+    };
+    gate.approve_contract("two-face.test.near", "empreinte")
+        .await?;
+    let outcome = gate.propose(&deux_visages, &deux_visages_intent).await?;
+    println!("    joué deux fois (2 NEAR puis 0,02 NEAR) :");
+    rapporte(
+        &outcome.verdict,
+        outcome.executed,
+        &rule_ids(&outcome.rules),
+    );
+
+    step(8, "Gel d'un geste, puis nouvelle demande");
     gate.freeze().await?;
     let outcome = gate.propose(&transfert, &honnete).await?;
     rapporte(
@@ -165,7 +203,7 @@ pub async fn run_demo(gate: &Gatekeeper) -> anyhow::Result<()> {
         &rule_ids(&outcome.rules),
     );
 
-    step(8, "Vérification des invariants du coffre");
+    step(9, "Vérification des invariants du coffre");
     invariants(gate).await?;
 
     let status = gate.status().await?;
@@ -202,7 +240,7 @@ async fn invariants(gate: &Gatekeeper) -> anyhow::Result<()> {
         status
             .known_contracts
             .keys()
-            .all(|c| c == "good-dex.test.near" || c == "drainer.test.near"),
+            .all(|c| DEMO_CONTRACTS_APPROUVES.contains(&c.as_str())),
     );
 
     // I4 : le garde-barrière ne détient que la clé limitée (aucune clé plein accès).

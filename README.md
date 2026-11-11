@@ -40,7 +40,7 @@ make build
 # 3. Dérouler la démonstration complète (moins de 2 minutes)
 make demo
 
-# 4. Jouer le corpus des 6 contrats piégés avec et sans pare-feu
+# 4. Jouer le corpus des 7 contrats piégés avec et sans pare-feu
 make attack
 
 # 5. Lancer le banc de test robotisé (200 robots : matrice de confusion)
@@ -76,10 +76,14 @@ make mcp
     après accord du propriétaire :
     verdict BLOCK — rien signé — règles : R8
 
-[7] Gel d'un geste, puis nouvelle demande
+[7] Piège two-face : honnête sous 0,1 NEAR, voleur au-dessus (R12)
+    joué deux fois (2 NEAR puis 0,02 NEAR) :
+    verdict BLOCK — rien signé — règles : R7, R8, R12
+
+[8] Gel d'un geste, puis nouvelle demande
     verdict BLOCK — rien signé — règles : GEL
 
-[8] Vérification des invariants du coffre
+[9] Vérification des invariants du coffre
     I1 (plafond 24 h respecté) : OK
     I2 (coffre gelé) : OK
     I3 (contrats connus maîtrisés) : OK
@@ -98,14 +102,15 @@ make mcp
   contrat        verdict    règles                       ce que perd un wallet nu
   ----------------------------------------------------------------------------------------------
   drainer        BLOCK      R8                           2 NEAR encaissés, rien reçu
-  skimmer        BLOCK      R7                           20 % des jetons détournés vers un tiers
+  skimmer        BLOCK      R7, R12                      20 % des jetons détournés vers un tiers
   half-step      BLOCK      R9                           fonds pris, puis reçu en échec
   liar           BLOCK      R8                           « succès » annoncé, aucun jeton reçu
   approver       BLOCK      R3                           NFT du coffre approuvé à un tiers
   shapeshifter   BLOCK      R6                           code remplacé après l'accord
+  two-face       BLOCK      R7, R8, R12                  honnête sous 0,1 NEAR, voleur au-dessus
 
-  6/6 pièges arrêtés avant signature.
-  6/6 fois la règle attendue a mordu.
+  7/7 pièges arrêtés avant signature.
+  7/7 fois la règle attendue a mordu.
 ```
 
 Chaque piège est joué **après** approbation du contrat par le propriétaire : c'est le
@@ -180,7 +185,7 @@ Face à un contrat piégé (`skimmer`) :
 
 ---
 
-## 4. Les 11 règles du pare-feu
+## 4. Les 12 règles du pare-feu
 
 | N° | Règle | Verdict | Ce qu'elle arrête |
 |---|---|---|---|
@@ -211,15 +216,17 @@ Chaque contrat est joué deux fois : d'abord contre un wallet sans pare-feu (té
 | `liar` | Répond « succès » sans rien transférer | −2 NEAR pour rien | **Refusé** avant signature | `R8` |
 | `approver` | Tente de faire approuver un NFT au passage | NFT exposé | **Refusé** avant signature | `R3` |
 | `shapeshifter` | Remplacement du code après accord | Contrat altéré | **Refusé** avant signature | `R6` |
+| `two-face` | Honnête sous 0,1 NEAR, voleur au-dessus | 95 % des jetons détournés | **Refusé** avant signature | `R12` |
 | Vol de clé (niveau V1) | Appel direct du coffre avec la clé d'agent volée | N/A | **Rejeté on-chain** : `ERR_NO_CERT` | On-chain |
 
-**Résultat mesuré** : 6/6 pièges arrêtés avant signature, 6/6 fois la règle attendue a mordu.
+**Résultat mesuré** : 7/7 pièges arrêtés avant signature, 7/7 fois la règle attendue a mordu.
 
-> **Note V1** : le contrôle au retour (gel + marquage `hostile` du contrat) est implémenté
-> dans le contrat (`on_post_check`) mais **désactivé** dans cette version : la chaîne de
-> promesses `appel → on_done → lecture du solde → on_post_check` dépasse le budget de gas
-> d'un appel d'agent limité. Le code est présent, testé unitairement, et l'activation
-> demandera d'augmenter le gas attaché — c'est la première chose à faire en priorité.
+> **Note V1 — contrôle au retour activé.** La chaîne de promesses
+> `appel → on_done → lecture du solde → on_post_check` tourne maintenant dans le budget de
+> gas d'un appel d'agent (300 TGas attachés, 100 TGas pour l'appel visé, 10 TGas par rappel) :
+> si le solde promis par le certificat n'est pas atteint au retour, le coffre **gèle** et marque
+> le contrat **hostile** (`ERR_HOSTILE` pour tout appel ultérieur). Prouvé par le test
+> d'intégration `crates/dryrun-sim/tests/v1_post_check.rs` (bac à sable réel).
 
 ---
 
@@ -267,6 +274,55 @@ La clé publique du simulateur est déposée sur le coffre par le propriétaire
 
 ---
 
+## 5 ter. Les deux défenses qui suivent la transaction
+
+### Le contrôle au retour (`on_post_check`)
+
+Le certificat ne se contente pas d'autoriser la sortie : il **promet un résultat**.
+`post = (jeton, solde minimum attendu après l'appel)` est signé par le simulateur, puis
+vérifié **on-chain, après** l'exécution :
+
+```text
+appel visé → on_done (solde la dépense si le reçu a échoué)
+           → ft_balance_of(jeton)         lecture du solde réel
+           → on_post_check                solde < minimum promis ?
+                                            ├─ gel immédiat du coffre
+                                            └─ contrat marqué HOSTILE (événement NEP-297)
+```
+
+C'est la réponse aux contrats **dormeurs** : un contrat qui se tient bien en simulation et
+vole à l'exécution est neutralisé au retour, et il ne peut plus jamais être rappelé
+(`ERR_HOSTILE`). Toute la chaîne tient dans le budget d'un appel d'agent : 300 TGas
+attachés, 100 TGas pour l'appel visé, 10 TGas par rappel.
+
+```text
+$ cargo test -p dryrun-sim --test v1_post_check
+test le_contrôle_au_retour_gele_et_marque_hostile ... ok
+```
+
+### La simulation différentielle (R12)
+
+Chaque appel de contrat avec dépôt est joué **deux fois** : au montant réel, puis au
+centième. Les deux rejeux partent chacun d'un bac à sable jetable et tournent **en
+parallèle** (`tokio::join!`) : la latence ne double pas.
+
+Le test est **orienté** : R12 mord quand le petit montant est proportionnellement
+**mieux** traité que le montant réel — la signature d'un contrat qui se tient bien tant
+qu'il est observé. Les quantités reçues sont comparées entre elles (jamais divisées par le
+dépôt en yoctoNEAR) : le résultat ne dépend ni des décimales du jeton, ni des frais de gaz.
+
+```text
+$ cargo run --release -p dryrun-gate -- demo
+[7] Piège two-face : honnête sous 0,1 NEAR, voleur au-dessus (R12)
+    joué deux fois (2 NEAR puis 0,02 NEAR) :
+    verdict BLOCK — rien signé — règles : R7, R8, R12
+```
+
+`two-face` rend 95 % du montant converti sur 0,02 NEAR et 5 % seulement sur 2 NEAR :
+écart mesuré de 947 ‰, très au-dessus du seuil de 100 ‰.
+
+---
+
 ## 6. Rôle précis de NEAR Protocol
 
 Dry Run s'appuie sur trois primitives fondamentales de NEAR :
@@ -296,7 +352,8 @@ dry-run/
 │   ├── trap-half-step/              # Piège 3 : échec après encaissement
 │   ├── trap-liar/                   # Piège 4 : promet sans transférer
 │   ├── trap-approver/               # Piège 5 : tentative d'approbation NFT
-│   └── trap-shapeshifter/           # Piège 6 : altération de code
+│   ├── trap-shapeshifter/           # Piège 6 : altération de code
+│   └── trap-two-face/               # Piège 7 : honnête sous un seuil, voleur au-dessus (R12)
 ├── web/                             # Interface graphique locale (carte en direct, frise, bouton de gel, scénarios 1-clic)
 ├── scripts/                         # Scripts de déploiement testnet et d'enregistrement vidéo
 └── docs/
@@ -326,7 +383,7 @@ Fonctionnalités de l'interface :
 - Formulaire pour tester une demande interactivement ;
 - **Affichage dynamique de la carte des effets** (rouge si BLOCK, vert si ALLOW) ;
 - **Badge du certificat V1** (condensé SHA-256, signature Ed25519, hauteur, nonce, statut) ;
-- Panneau de **scénarios rapides en 1 clic** (paiement honnête, injection, swap DEX, drainer, skimmer, approver) ;
+- Panneau de **scénarios rapides en 1 clic** (paiement honnête, injection, swap DEX, drainer, skimmer, approver, two-face) ;
 - Accordéon « reçus & logs NEAR détaillés » ;
 - Frise chronologique des décisions prises ;
 - **Bouton de gel d'urgence en un clic** (déclenche la clé de gel).
@@ -353,10 +410,11 @@ Outils exposés : `wallet_status`, `wallet_propose`, `wallet_freeze`, `wallet_ex
 - [x] **Contrats inconnus** : tout appel vers un compte absent de `known` est refusé on-chain par `ERR_UNKNOWN_CONTRACT` (`tests::known::i3_*`).
 - [x] **Gel étanche** : la clé de gel gèle en une transaction sans wallet, toute transaction ultérieure est rejetée `ERR_FROZEN` (`tests::freeze::i2_*`).
 - [x] **Simulation exacte** : les variations de soldes simulées sont identiques aux variations réelles (+1 NEAR à bob).
-- [x] **Corpus de pièges** : les 6 contrats piégés (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`) sont bloqués avant signature (`make attack`).
+- [x] **Corpus de pièges** : les 7 contrats piégés (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`, `two-face`) sont bloqués avant signature (`make attack`).
 - [x] **Injection bloquée** : « envoie 49 NEAR à mallory » est bloqué par le pare-feu (R1) et rejeté on-chain (`ERR_OVER_TX_CAP`).
 - [x] **Certificat Ed25519 (V1)** : vérification cryptographique on-chain du certificat de simulation avant exécution.
-- [x] **Simulation différentielle (V1)** : démasquage des contrats à double visage via R12.
+- [x] **Contrôle au retour (V1)** : si le solde promis par le certificat n'est pas atteint au retour, le coffre gèle et marque le contrat hostile (`tests/v1_post_check.rs`, bac à sable réel).
+- [x] **Simulation différentielle (V1)** : R12 sur le **chemin par défaut** — tout appel de contrat avec dépôt est rejoué au centième, en parallèle (`two-face` bloqué, écart 947 ‰).
 - [x] **Matrice de performance** : `make sim` validé à 100 % de précision sur 200 robots synthétiques.
 - [x] **Serveur MCP** : intégration native pour agents Claude / Cursor / ZeroClaw via JSON-RPC.
 - [x] **Simulateur arrêté** : toute demande est refusée par précaution (« tout doute bloque »).
@@ -372,11 +430,12 @@ L'honnêteté vaut mieux qu'une promesse : voici ce qui marche, et ce qui ne mar
 |---|---|---|
 | Simulation (R1 à R11) | ✅ | La transaction est rejouée dans un bac à sable, sous l'identité du coffre. |
 | Certificat V1 on-chain | ✅ | Signature Ed25519 vérifiée par le contrat, nonces anti-rejeu, fraîcheur. |
-| Corpus de 6 pièges | ✅ | 6/6 bloqués, 6/6 avec la règle attendue. |
+| Corpus de 7 pièges | ✅ | 7/7 bloqués, 7/7 avec la règle attendue (`make attack`). |
 | Banc de 200 robots | ✅ | `make sim` : 100 % de précision sur le corpus synthétique. |
 | Serveur MCP | ✅ | JSON-RPC 2.0, 4 outils. |
-| **Contrôle au retour** (`on_post_check`) | ⚠️ | Implémenté et testé unitairement, mais **désactivé** : la chaîne de promesses dépasse le budget de gas d'un appel d'agent limité. À activer en augmentant le gas attaché. |
-| **Simulation différentielle** (R12) | ⚠️ | Implémentée (`simulate_differential`), mais pas encore branchée sur le chemin par défaut : elle est exposée à l'API et au code, pas encore au `make demo`. |
+| **Contrôle au retour** (`on_post_check`) | ✅ | Activé : `appel → on_done → lecture du solde → on_post_check` dans le budget de gas d'un agent. Écart constaté → gel + marquage hostile (`tests/v1_post_check.rs`). |
+| **Simulation différentielle** (R12) | ✅ | Branchée sur le **chemin par défaut** : tout appel de contrat avec dépôt est rejoué au centième (`Gatekeeper::propose`). Les deux rejeux tournent en parallèle, la latence ne double pas. |
+| Portée de R12 | ⚠️ | R12 est **orienté** : il ne mord que si le petit montant est proportionnellement mieux traité que le montant réel (signature du double visage). Un contrat à **dépôt minimum fixe** (comme `good-dex` ici, 2 NEAR) ne peut pas être rejoué au centième : R12 n'apporte alors aucun signal et les autres règles tranchent. Un contrat à prix fixe légitime peut être signalé — assumé, le seuil est à 100 ‰ (le SPEC annonce 5 %, mais une courbe de liaison honnête dérive déjà de plusieurs pour cent entre 2 NEAR et 0,02 NEAR). |
 | **Témoin « wallet nu »** | ⚠️ | Le témoin est joué **après** le corpus, sur le coffre protégé : il montre `ERR_NO_CERT` (la défense V1), pas la perte de fonds brute. La perte brute est documentée dans le tableau de la section 5 et montrée par la simulation. |
 | Testnet public | ⚠️ | `make demo-testnet` vérifie la connectivité au RPC testnet et donne la procédure de déploiement ; le déploiement réel exige un compte testnet avec des fonds. |
 | Enclave TEE (MAX) | ❌ | Non commencé. La clé du simulateur vit dans le processus du garde-barrière. |

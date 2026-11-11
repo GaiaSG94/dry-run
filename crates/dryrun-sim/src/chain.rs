@@ -324,7 +324,34 @@ impl Chain {
         )
         .await?;
 
-        // 6. Approver : collection visée et voleur.
+        // 6. Two-face : réserve de TEST pour les deux visages.
+        self.try_call(
+            accounts::OWNER,
+            accounts::TWO_FACE,
+            "new",
+            &json!({
+                "owner_id": accounts::OWNER,
+                "token_id": accounts::TEST_TOKEN,
+                "skim_to": accounts::MALLORY,
+            }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            accounts::TEST_TOKEN,
+            "mint_to",
+            &json!({ "account_id": accounts::TWO_FACE, "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+        self.try_call(
+            accounts::OWNER,
+            accounts::TWO_FACE,
+            "fund",
+            &json!({ "amount": DEMO_RESERVE.to_string() }),
+        )
+        .await?;
+
+        // 7. Approver : collection visée et voleur.
         self.try_call(
             accounts::OWNER,
             "approver.test.near",
@@ -333,7 +360,7 @@ impl Chain {
         )
         .await?;
 
-        // 7. NFT : l'émetteur, puis un jeton dans le coffre (piège `approver`).
+        // 8. NFT : l'émetteur, puis un jeton dans le coffre (piège `approver`).
         self.try_call(
             accounts::OWNER,
             accounts::TEST_NFT,
@@ -349,7 +376,7 @@ impl Chain {
         )
         .await?;
 
-        // 8. Le coffre est autorisé à approuver ses propres NFT : c'est ce que
+        // 9. Le coffre est autorisé à approuver ses propres NFT : c'est ce que
         //    ferait un wallet classique, et c'est ce que le piège exploite.
         self.try_call(
             accounts::VAULT,

@@ -83,6 +83,11 @@ pub const CONTRACTS: &[ContractSpec] = &[
         account: "shapeshifter.test.near",
         is_vault: false,
     },
+    ContractSpec {
+        wasm: "trap_two_face",
+        account: TWO_FACE,
+        is_vault: false,
+    },
 ];
 
 /// Comptes créés à la genèse (`test.near` existe déjà : c'est le compte
@@ -102,8 +107,12 @@ pub const GENESIS_ACCOUNTS: &[&str] = &[
     "liar.test.near",
     "approver.test.near",
     "shapeshifter.test.near",
+    TWO_FACE,
     GHOST,
 ];
+
+/// Contrat à deux visages (piège 7, règle R12).
+pub const TWO_FACE: &str = "two-face.test.near";
 
 /// Compte inexistant appelé par `half-step` : le reçu échoue, les fonds restent.
 pub const GHOST: &str = "ghost.test.near";

@@ -239,6 +239,15 @@ impl Simulator {
         Ok(ExecOutcome::from(outcome))
     }
 
+    /// Solde du coffre pour un jeton fongible donné.
+    pub async fn ft_balance_of(&self, token: &str) -> Result<u128> {
+        let value = self
+            .chain
+            .view_call(token, "ft_balance_of", &json!({ "account_id": self.vault }))
+            .await?;
+        Ok(util::amount_of(&value).unwrap_or(0))
+    }
+
     /// Clé publique du simulateur (hexadécimal), à enregistrer dans le coffre.
     pub fn sim_public_key(&self) -> String {
         self.signer.public_key_hex()
@@ -275,6 +284,15 @@ impl Simulator {
         effects: &Effects,
         post: Vec<(String, u128)>,
     ) -> Result<SignedCert> {
+        // Les post-conditions sont exprimées en **solde absolu attendu** après
+        // l'appel : le contrat ne peut pas lire un delta, il compare son solde
+        // du jeton au seuil certifié. Le seuil = solde actuel + minimum promis.
+        let mut absolute = Vec::with_capacity(post.len());
+        for (token, min) in post {
+            let actuel = self.ft_balance_of(&token).await.unwrap_or(0);
+            absolute.push((token, actuel.saturating_add(min)));
+        }
+        let post = absolute;
         let height = effects
             .snapshot
             .height
@@ -290,7 +308,7 @@ impl Simulator {
         Ok(self.signer.sign(cert))
     }
 
-    /// Simule deux fois, au montant réel et au centième, et compare les taux.
+    /// Simule deux fois, au montant réel et au centième, et compare les reçus.
     ///
     /// Démasque les contrats à double visage et ceux qui reconnaissent le bac
     /// à sable (règle R12).
@@ -299,13 +317,37 @@ impl Simulator {
         demand: &Demande,
         intent: &Intent,
     ) -> Result<(Decision, DifferentialReport)> {
-        let full = sim::replay(&self.chain, demand, intent).await?;
+        // Les deux rejeux partent chacun d'un bac à sable jetable : ils sont
+        // indépendants, donc joués en parallèle pour ne pas doubler la latence.
+        let small_demand = differential::scaled(demand, DIFFERENTIAL_DIVISOR);
+        let (full, small) = tokio::join!(
+            sim::replay(&self.chain, demand, intent),
+            sim::replay(&self.chain, &small_demand, intent),
+        );
+        let full = full?;
         let ctx = self.rule_ctx(demand, intent, &full.effects).await?;
         let mut decision = decide(&ctx, &full.effects);
 
-        let small_demand = differential::scaled(demand, DIFFERENTIAL_DIVISOR);
-        let small = sim::replay(&self.chain, &small_demand, intent).await?;
-        let report = differential::compare(&self.vault, intent, &full.effects, &small.effects);
+        // Un montant réduit peut échouer pour une raison honnête (dépôt arrondi
+        // à zéro, reçu refusé) : on perd le signal différentiel, jamais la
+        // décision du premier passage.
+        let small = match small {
+            Ok(small) => small,
+            Err(err) => {
+                tracing::warn!(
+                    erreur = %format!("{err:#}"),
+                    "rejeu réduit impossible : R12 sans signal"
+                );
+                return Ok((decision, DifferentialReport::default()));
+            }
+        };
+
+        let report = differential::compare(
+            &self.vault,
+            DIFFERENTIAL_DIVISOR,
+            &full.effects,
+            &small.effects,
+        );
         if let Some(hit) = differential::differential_hit(&report) {
             decision.rules.push(hit);
             decision.verdict = Verdict::Block;

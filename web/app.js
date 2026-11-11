@@ -458,6 +458,19 @@ const SCENARIOS = {
             min_in: [],
         },
     },
+    "trap-two-face": {
+        kind: "function_call",
+        contract: "two-face.test.near",
+        method: "trap",
+        args: null,
+        deposit: "2000000000000000000000000",
+        gas: 100000000000000,
+        intent: {
+            summary: "échanger 2 NEAR contre au moins 1.9 TEST",
+            beneficiaries: ["two-face.test.near"],
+            min_in: [["TEST", "1900000000000000000"]],
+        },
+    },
 };
 
 function initScenarios() {

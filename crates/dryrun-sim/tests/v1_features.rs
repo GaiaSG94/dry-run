@@ -1,8 +1,9 @@
 //! Tests de la simulation différentielle et des certificats de simulation (V1).
 
-use dryrun_core::types::{Cert, Demande, Effects, FtDelta, Intent, NearDelta, Verdict};
+use dryrun_core::types::{Cert, Demande, Effects, FtDelta, NearDelta, Verdict};
 use dryrun_sim::cert::CertSigner;
 use dryrun_sim::differential::{self, scaled};
+use dryrun_sim::DIFFERENTIAL_DIVISOR;
 
 #[test]
 fn signer_generates_verifiable_certificate() {
@@ -38,12 +39,6 @@ fn differential_scaling_divides_amount_correctly() {
 #[test]
 fn differential_detects_divergent_behavior() {
     let vault = "vault.test.near";
-    let intent = Intent {
-        summary: "échanger 2 NEAR contre TEST".to_string(),
-        beneficiaries: vec!["dex.test.near".to_string()],
-        min_in: vec![("TEST".to_string(), 10u128.pow(24))],
-        max_out: None,
-    };
 
     // Au montant normal : 2 NEAR sortent, 0 TEST reçu (piège !)
     let mut full = Effects::default();
@@ -64,7 +59,7 @@ fn differential_detects_divergent_behavior() {
         delta: 2 * 10i128.pow(22),
     });
 
-    let report = differential::compare(vault, &intent, &full, &small);
+    let report = differential::compare(vault, DIFFERENTIAL_DIVISOR, &full, &small);
     assert!(report.asymmetric);
     let hit = differential::differential_hit(&report).expect("devait lever R12");
     assert_eq!(hit.id, "R12");

@@ -56,6 +56,17 @@ pub mod ext_contract {
     }
 }
 
+/// Post-condition à vérifier au retour de l'appel (niveau V1).
+#[derive(Clone, Debug)]
+struct PostCheck {
+    /// Contrat du jeton dont on relit le solde.
+    token: AccountId,
+    /// Solde minimal promis par le certificat.
+    min: u128,
+    /// Contrat appelé : celui qu'on marquera hostile en cas d'écart.
+    target: AccountId,
+}
+
 /// État du coffre.
 #[near(contract_state)]
 #[derive(PanicOnDefault)]
@@ -149,10 +160,11 @@ impl Vault {
             events::refused(reason);
             env::panic_str(reason);
         }
+        let post = post_check_of(cert.as_ref(), action.receiver());
         let op = self.count_spend(&action, hour);
         self.note("executed", Some(action.receiver()), action.amount(), None);
         events::executed(action.kind(), action.receiver(), action.amount());
-        self.send(action, op)
+        self.send(action, op, post)
     }
 
     /// Vérifie la validité cryptographique et métier du certificat de simulation.
@@ -429,6 +441,20 @@ impl Vault {
     }
 }
 
+/// Extrait la première post-condition du certificat, si elle est exploitable.
+fn post_check_of(
+    cert: Option<&dryrun_core::types::SignedCert>,
+    target: &AccountId,
+) -> Option<PostCheck> {
+    let (token, min) = cert?.cert.post.first()?;
+    let token = token.parse::<AccountId>().ok()?;
+    Some(PostCheck {
+        token,
+        min: *min,
+        target: target.clone(),
+    })
+}
+
 impl Vault {
     /// Le propriétaire seul.
     fn require_owner(&self) {
@@ -505,34 +531,76 @@ impl Vault {
         op
     }
 
-    /// Construit la promesse sortante, suivie du rappel `on_done`.
-    /// Construit la promesse sortante, suivie du rappel `on_done`.
-    fn send(&self, action: VaultAction, op: u64) -> Promise {
-        let callback = ext_contract::self_contract::ext(env::current_account_id())
-            .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
-            .on_done(U128(op.into()));
+    /// Construit la chaîne de promesses : l'appel visé, puis le rappel `on_done`,
+    /// puis — si le certificat porte une post-condition — la lecture du solde
+    /// promis et le contrôle `on_post_check`.
+    ///
+    /// Chaque `.then()` reçoit une promesse **vierge** : near-sdk panique si l'on
+    /// ré-attache une promesse déjà programmée après une autre.
+    fn send(&self, action: VaultAction, op: u64, post: Option<PostCheck>) -> Promise {
+        let base = self.outgoing(action);
+        let chain = base.then(self.on_done_promise(op));
+        match post {
+            Some(check) => chain
+                .then(self.balance_read_promise(&check.token))
+                .then(self.on_post_check_promise(op, &check)),
+            None => chain,
+        }
+    }
+
+    /// L'appel sortant demandé par l'agent (transfert ou appel de contrat).
+    fn outgoing(&self, action: VaultAction) -> Promise {
         match action {
             VaultAction::Transfer {
                 receiver_id,
                 amount,
-            } => Promise::new(receiver_id)
-                .transfer(NearToken::from_yoctonear(amount.0))
-                .then(callback),
+            } => Promise::new(receiver_id).transfer(NearToken::from_yoctonear(amount.0)),
             VaultAction::Call {
                 receiver_id,
                 method_name,
                 args,
                 deposit,
                 gas,
-            } => Promise::new(receiver_id)
-                .function_call(
-                    method_name,
-                    args.into_bytes(),
-                    NearToken::from_yoctonear(deposit.0),
-                    gas,
-                )
-                .then(callback),
+            } => Promise::new(receiver_id).function_call(
+                method_name,
+                args.into_bytes(),
+                NearToken::from_yoctonear(deposit.0),
+                gas,
+            ),
         }
+    }
+
+    /// Promesse vierge du rappel `on_done`.
+    fn on_done_promise(&self, op: u64) -> Promise {
+        ext_contract::self_contract::ext(env::current_account_id())
+            .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
+            .on_done(U128(op.into()))
+    }
+
+    /// Promesse vierge de lecture du solde du jeton promis (contrôle au retour).
+    fn balance_read_promise(&self, token: &AccountId) -> Promise {
+        let args = serde_json::to_vec(&serde_json::json!({
+            "account_id": env::current_account_id()
+        }))
+        .unwrap_or_default();
+        Promise::new(token.clone()).function_call(
+            "ft_balance_of".to_string(),
+            args,
+            NearToken::from_yoctonear(0),
+            Gas::from_tgas(POST_CHECK_GAS_TGAS),
+        )
+    }
+
+    /// Promesse vierge du rappel `on_post_check`.
+    fn on_post_check_promise(&self, op: u64, check: &PostCheck) -> Promise {
+        ext_contract::self_contract::ext(env::current_account_id())
+            .with_static_gas(Gas::from_tgas(CALLBACK_GAS_TGAS))
+            .on_post_check(
+                U128(op.into()),
+                check.token.clone(),
+                U128(check.min),
+                check.target.clone(),
+            )
     }
 
     /// Retient la clé d'agent qui vient d'appeler `execute` (aucune clé n'est ajoutée).

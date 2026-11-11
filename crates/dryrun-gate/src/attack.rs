@@ -1,6 +1,6 @@
 //! Corpus d'attaques : chaque piège est joué dans **son** scénario.
 //!
-//! Le pare-feu ne gèle pas le coffre : il refuse **avant** de signer. Les six
+//! Le pare-feu ne gèle pas le coffre : il refuse **avant** de signer. Les sept
 //! pièges sont donc joués à travers le pare-feu (aucun ne passe), puis le
 //! témoin « wallet nu » est joué une fois pour de vrai sur le contrat le plus
 //! simple (`drainer`) : c'est la preuve que le corpus nuit réellement.
@@ -37,7 +37,8 @@ struct Piege {
     temoin: &'static str,
 }
 
-/// Le corpus des six contrats piégés du niveau M.
+/// Le corpus des contrats piégés : les six du niveau M, plus le contrat à deux
+/// visages qui ne tombe que sur la simulation différentielle (V1, R12).
 fn corpus() -> Vec<Piege> {
     vec![
         Piege {
@@ -87,6 +88,16 @@ fn corpus() -> Vec<Piege> {
             min_test: 0,
             attendue: "R6",
             temoin: "code remplacé après l'accord",
+        },
+        Piege {
+            nom: "two-face",
+            contrat: "two-face.test.near",
+            depot: 2 * ONE_NEAR,
+            // L'agent déclare le minimum honnête (95 % de 2 NEAR en TEST) :
+            // le contrat ne le tient pas au-dessus de son seuil caché.
+            min_test: 19 * ONE_TEST / 10,
+            attendue: "R12",
+            temoin: "honnête sous 0,1 NEAR, voleur au-dessus",
         },
     ]
 }
