@@ -117,9 +117,17 @@ impl Simulator {
     pub async fn vault_status(&self) -> anyhow::Result<VaultStatus> {
         let raw = self.inner.vault_status().await?;
         let known = self.inner.known_contracts().await.unwrap_or_default();
+        // Le solde est une propriété du **compte**, pas du contrat : `status()` ne
+        // le connaît pas. On le lit sur l'état du compte (repli : champ `balance`).
+        let solde = self
+            .inner
+            .state_of(self.inner.vault())
+            .await
+            .map(|etat| etat.balance)
+            .unwrap_or_else(|_| amount_field(raw.get("balance")).yocto());
         Ok(VaultStatus {
             account_id: self.inner.vault().to_string(),
-            balance: amount_field(raw.get("balance")),
+            balance: Amount(solde),
             tx_cap: amount_field(raw.get("tx_cap")),
             daily_cap: amount_field(raw.get("daily_cap")),
             spent_24h: amount_field(raw.get("spent_24h")),
