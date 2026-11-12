@@ -48,4 +48,5 @@
 - README : §10 déclare Claude Code et opencode dans l'assistance IA ; ligne de période (premier commit 10/11, soumission 14/11 23:59 UTC) ajoutée en tête.
 - `scripts/record-demo.sh` : plus d'IP ni de nom de machine en dur — paramétré par `DRYRUN_GATE_URL` (défaut 127.0.0.1:8787) et `DRYRUN_DEMO_HOST` (vide = étape d'ouverture d'écran sautée). Syntaxe bash vérifiée (git-bash).
 - Tag `hackathon-submission` posé sur `main` et poussé sur les deux remotes.
-- Note opérationnelle : le serveur `dryrun-gate serve --port 8791 --sim stub` tournant a dû être arrêté pour relinker le binaire pendant les tests ; relancé ensuite avec le binaire reconstruit.
+- **Vidéo brute enregistrée** : `G-DESIGN/video-demo-raw-2026-11-12.mp4` (42 s, 1280x736, 30 i/s) — serveur `--sim stub` port 8787 + fenêtre Chrome `--app` + capture ffmpeg gdigrab, `scripts/record-demo.sh` déroulé en entier (2 ALLOW, 2 BLOCK, gel final). Non commitée (brute, à monter selon `prompts/05-video.md`).
+- Note opérationnelle : le serveur `dryrun-gate serve --port 8791 --sim stub` tournant a dû être arrêté pour relinker le binaire pendant les tests ; relancé ensuite avec le binaire reconstruit, puis arrêté après la capture.
