@@ -48,7 +48,7 @@
       const ctx = R.ctx;
       if (T.bgTop) { const g = ctx.createLinearGradient(0, 0, 0, R.H); g.addColorStop(0, T.bgTop); g.addColorStop(0.6, T.bg); g.addColorStop(1, T.bgLow || T.bg); ctx.fillStyle = g; ctx.fillRect(0, 0, R.W, R.H); }
       const hz = R.p(0.6, 0, -6);
-      if (hz.ok) { const g = ctx.createRadialGradient(R.W / 2, hz.y, 0, R.W / 2, hz.y, R.W * 0.6); g.addColorStop(0, R.A(0.07 * (T.horizon == null ? 1 : T.horizon))); g.addColorStop(1, R.A(0)); ctx.fillStyle = g; ctx.fillRect(0, 0, R.W, R.H); }
+      if (hz.ok) { const g = ctx.createRadialGradient(R.cx0, hz.y, 0, R.cx0, hz.y, R.W * 0.6); g.addColorStop(0, R.A(0.07 * (T.horizon == null ? 1 : T.horizon))); g.addColorStop(1, R.A(0)); ctx.fillStyle = g; ctx.fillRect(0, 0, R.W, R.H); }
       const c = s.clock, fx = T.bgFx;
       if (fx === "aurora") [[0.2, 0.3, 0.5], [0.78, 0.22, 0.45], [0.55, 0.72, 0.6], [0.08, 0.82, 0.4]].forEach(([bx, by, br], i) => {
         const x = R.W * (bx + 0.07 * Math.sin(c * 0.11 + i * 2)), y = R.H * (by + 0.06 * Math.cos(c * 0.09 + i)), rr = R.W * br * 0.62;
@@ -62,6 +62,11 @@
       }
       words(R, s); verdictHud(R, s);
     }
+    /* rail de gauche : taille des lettres, position de la ligne de base, largeur de marge à réserver */
+    const railSize = (R) => C(R.W * 0.04, 24, 64);
+    const railX = (R) => (R.narrow ? 6 : 16) + railSize(R) * 0.8;
+    const railPad = (R) => railX(R) + railSize(R) * 0.3 + (R.narrow ? 4 : 14);
+
     /* « réel » en haut, « simulé » en bas : deux mots À PLAT (écran), jamais en perspective */
     function words(R, s) {
       const ctx = R.ctx, mode = T.words || "right", style = T.wordStyle || "solid";
@@ -70,13 +75,13 @@
       const yAt = (x) => a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x || 1);
       const W1 = T.word1 || (T.upper ? "RÉEL" : "réel"), W2 = T.word2 || (T.upper ? "SIMULÉ" : "simulé");
       const center = mode === "center";
-      const size = center ? C(R.W * 0.15, 60, 280) : C(R.W * 0.06, 30, 100), x = center ? R.W / 2 : R.W - (R.narrow ? 16 : 36);
+      const size = center ? C(R.W * 0.15, 60, 280) : mode === "left" ? railSize(R) : C(R.W * 0.06, 30, 100), x = center ? R.cx0 : R.W - (R.narrow ? 16 : 36);
       const paint = (txt, px, py, col, colA) => {
         if (style === "outline") { ctx.strokeStyle = col; ctx.lineWidth = T.wordStroke || 1.6; ctx.strokeText(txt, px, py); }
         else { ctx.fillStyle = style === "ghost" ? colA : col; ctx.fillText(txt, px, py); }
       };
       ctx.save();
-      if ((s.ph === "bench" || s.ph === "end") && !center) ctx.globalAlpha = 0.14; // le banc occupe la droite : les mots s'estompent
+      if ((s.ph === "bench" || s.ph === "end") && !center && mode !== "left") ctx.globalAlpha = 0.14; // le banc occupe la droite : les mots s'estompent
       else if (T.verdictHud && s.verdict) { // le verdict géant prend la place : les deux mots s'effacent
         const fade = s.reached("chain") ? 1 - C(s.since("chain") / 0.5) : s.ph === "approve" ? 1 - s.p * 0.7 : 1;
         ctx.globalAlpha = 1 - 0.9 * fade * C(s.since("verdict", s.lastPass) / 0.3);
@@ -85,11 +90,12 @@
       ctx.letterSpacing = size * (T.wordLs == null ? 0.1 : T.wordLs) + "px";
       const c1 = R.Wh(0.92), c2 = R.A(1), g1 = R.Wh(T.ghostA || 0.1), g2 = R.A((T.ghostA || 0.1) * 1.5);
       if (mode === "left") {
-        // colonne de gauche, à plat : « réel » en haut (sous la marque), « sand » en bas
-        const xl = R.narrow ? 16 : 30;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top"; paint(W1, xl, Math.max(128, R.H * 0.15), c1, g1);
-        ctx.textBaseline = "alphabetic"; paint(W2, xl, R.H - 215, c2, g2);
+        // rail vertical dans la marge de gauche, à plat : « réel » au-dessus de la ligne du plan,
+        // « sand » en dessous. La scène est cadrée hors de cette marge (R.padL) : aucun chevauchement.
+        const xr = railX(R), y = C(yAt(xr), R.H * 0.36, R.H * 0.6);
+        ctx.translate(xr, y); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "alphabetic";
+        ctx.textAlign = "left"; paint(W1, 24, 0, c1, g1);
+        ctx.textAlign = "right"; paint(W2, -24, 0, c2, g2);
       } else if (mode === "rail") {
         const y = yAt(x - size * 0.5);
         ctx.translate(x - size * 0.1, y); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "alphabetic";
@@ -310,8 +316,12 @@
       for (let i = 0; i < 100; i++) { const an = (i / 100) * Math.PI * 2; R.dot([c[0] + Math.cos(an) * 2.6, 0.02, c[2] + Math.sin(an) * 2.6], 0.04, { fill: i < VN.journal ? R.A(1) : R.Wh(0.15) }); }
       // libellés : le minimum, en gros
       const lx = c[0] - 2.4;
-      R.text([lx, 3.15, 1], "coffre", { px: 18, weight: 800, font: "display", align: "right", color: R.Wh(0.95) });
-      R.text([lx, 2.55, 1], DR.fmt(VN.balance, 0) + " NEAR", { px: 30, weight: 800, font: "mono", align: "right", color: fr ? R.Wh(1) : R.A(1), glow: 10 });
+      // alignés à droite contre le coffre : s'ils devaient déborder sur la marge de gauche
+      // (rail « réel / sand ») ou sortir de l'écran, ils sont décalés d'autant vers la droite.
+      const solde = DR.fmt(VN.balance, 0) + " NEAR", pl = R.p([lx, 2.55, 1]);
+      const dxl = Math.max(0, R.padL + 10 + solde.length * 18.5 * (R.narrow ? 0.88 : 1) - pl.x);
+      R.text([lx, 3.15, 1], "coffre", { px: 18, weight: 800, font: "display", align: "right", color: R.Wh(0.95), dx: dxl });
+      R.text([lx, 2.55, 1], solde, { px: 30, weight: 800, font: "mono", align: "right", color: fr ? R.Wh(1) : R.A(1), glow: 10, dx: dxl });
       if (fr) R.text([c[0], c[1] + 0.35, c[2] + 1.1], "FROZEN", { px: 34, weight: 900, ls: 5, font: "display", color: R.Wh(1), glow: 22, glowColor: R.Wh(0.7) });
       bracket(R, c, 1.5, 1.75, "VAULT");
       agent(R, s, c);
@@ -590,6 +600,7 @@
       id: T.id, name: T.name, accent: T.accent, bg: T.bg, theme: T, nav: T.nav,
       idea: T.idea, hello: T.hello, tech: T.tech, centerY: T.centerY,
       camera: cam,
+      padLeft: (R) => (T.words === "left" ? railPad(R) : 0),
       cameraAt(s) {
         const ph = s.ph, P = T.camK || 1;
         const Y = cam.yaw;

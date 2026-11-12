@@ -16,7 +16,7 @@
     approve: "le propriétaire approuve — 1 yocto",
     cert: "certificat Ed25519",
     chain: "exécution réelle sur NEAR",
-    proof: "simulé == réel",
+    proof: "sand = réel",
     blocked: "rien n’est signé — la chaîne reste intacte",
     mcp: "boucle côté agent (MCP) — hors pare-feu",
     bypass: "le voleur contourne le pare-feu",

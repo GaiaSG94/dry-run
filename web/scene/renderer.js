@@ -29,6 +29,9 @@
     R.cam = Object.assign({ yaw: 0, pitch: 0.2, dist: 14, fov: 0.85, target: [0, 0, 0] }, conf.camera || {});
     R.user = { yaw: 0, pitch: 0, zoom: 1 };
     R.cy = conf.centerY || 0.44;
+    // marges réservées (px) : terminal à droite, mots « réel / sand » à gauche.
+    // La scène se cadre et se centre dans l'espace libre entre les deux.
+    R.padL = 0; R.padR = 0; R.cx0 = 0;
     R.LIGHT = norm([-0.45, 0.8, 0.55]);
     DR.COND = '"Bahnschrift", "DIN Alternate", "Arial Narrow", "Segoe UI", sans-serif';
     const FONT = { sans: DR.SANS, mono: DR.MONO, serif: DR.SERIF, cond: DR.COND };
@@ -50,13 +53,15 @@
       const eye = [c.target[0] + d * Math.sin(yaw) * Math.cos(pit), c.target[1] + d * Math.sin(pit), c.target[2] + d * Math.cos(yaw) * Math.cos(pit)];
       const f = norm(sub(c.target, eye)), r = norm(cross(f, [0, 1, 0]));
       R.eye = eye; R.fw = f; R.rt = r; R.up = cross(r, f); R.D = d;
-      R.F = (Math.min(R.W, R.H * 1.6) / 2) / Math.tan(c.fov / 2);
+      const free = Math.max(120, R.W - R.padL - R.padR); // largeur réellement disponible pour la scène
+      R.cx0 = R.padL + free / 2;
+      R.F = (Math.min(free, R.H * 1.6) / 2) / Math.tan(c.fov / 2);
     };
     R.p = (x, y, z) => {
       if (Array.isArray(x)) { z = x[2]; y = x[1]; x = x[0]; }
       const v = [x - R.eye[0], y - R.eye[1], z - R.eye[2]];
       const zz = dot(v, R.fw), k = R.F / Math.max(0.05, zz);
-      return { x: R.W / 2 + dot(v, R.rt) * k, y: R.H * R.cy - dot(v, R.up) * k, k, z: zz, ok: zz > 0.1 };
+      return { x: R.cx0 + dot(v, R.rt) * k, y: R.H * R.cy - dot(v, R.up) * k, k, z: zz, ok: zz > 0.1 };
     };
     // brume : 1 devant, T.fog derrière (perspective atmosphérique = profondeur lisible)
     const FOG = T.fog == null ? 0.45 : T.fog;

@@ -195,6 +195,11 @@
       const kk = q.has("t") && mode === "pause" ? 1 : 1 - Math.pow(T.camEase || 0.04, dt);
       ["yaw", "pitch", "dist", "fov"].forEach((key) => { R.cam[key] = DR.lerp(R.cam[key], want[key], kk); });
       R.cam.target = DR.mix3(R.cam.target, want.target || base.target, kk);
+      // marges réservées : le terminal (s'il est affiché) à droite, le rail de mots à gauche.
+      // Sans cela le terminal recouvrait le destinataire et les chiffres du banc.
+      const te = document.getElementById("term");
+      R.padR = te && te.getClientRects().length ? Math.max(0, R.W - te.getBoundingClientRect().left + 12) : 0;
+      R.padL = conf.padLeft ? conf.padLeft(R) : 0;
       R.basis();
       const ctx = R.ctx;
       ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);
