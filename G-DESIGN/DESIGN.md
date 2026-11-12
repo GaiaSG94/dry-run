@@ -323,6 +323,48 @@ du mode LIVE). Claude n'a pas modifié `web/`.
 
 ---
 
+## V9 — 2026-11-12 · une étiquette, verre poli, 3D rangée (`planches-v9/`) — C VERROUILLÉ, DÉPOSÉ DANS `web/`
+
+Demande de Gaia (après la V8.3 déposée dans `web/`) : 1) terminal en verre poli, mêmes couleurs et formes ;
+2) une seule étiquette (ce qu'est Dry Run, puis ce qui se passe), suppression de l'étiquette technologies,
+les étiquettes des menaces gardées ; 3) clarifier la 3D : trop d'éléments et de textes qui se chevauchent
+et se traversent.
+
+**Commun aux trois planches**
+- Une seule étiquette blanche : au repos, la phrase « Dry Run protège… » ; en cours, une phrase claire par étape
+  (« Bac à sable 2/5 — une clé jetable remplace la vraie clé. », « BLOCK — R1 (plafond) : la transaction ne sera jamais signée. »).
+- Les menaces restent des boutons sous l'étiquette ; le bouton du scénario en cours s'allume.
+- Supprimés : étiquette technologies, ligne de mode séparée. Le mode (démo scriptée / mode réel) passe en pastille dans l'en-tête du terminal.
+- Terminal en verre : la plaque porte sa propre lumière (reflet en biais, arête claire), car derrière lui il n'y a que du noir.
+- 3D : chaque élément a sa place et son socle ; plus aucun volume n'en traverse un autre (le rail de la chaîne ne passe plus
+  à travers le pare-feu ni la demande ; la demande contourne les volumes).
+- 7 étapes numérotées : 1 agent · 2 pare-feu · 3 bac à sable · 4 règles · 5 verdict · 6 coffre · 7 chaîne NEAR. L'étape active passe en plaque menthe, les autres s'estompent.
+- Tous les textes sont posés à plat sur des plaques, par-dessus la 3D, et placés par un algorithme qui interdit le chevauchement
+  (un trait fin relie une étiquette éloignée à son élément).
+- Le certificat se pose au-dessus du coffre (c'est le coffre qui le vérifie) ; le verdict a sa propre place.
+
+| Planche | Agencement | Terminal |
+|---|---|---|
+| A · Ligne | schéma de gauche à droite sur une dalle ; le bac à sable est une boîte de verre en pointillés contenant les copies | verre poli clair |
+| B · Miroir rangé | on garde « réel en haut / sand en bas » : chaque copie sous son original, règles et verdict sortis du reflet, à droite | verre fumé |
+| C · Plateau | vue de dessus, route au sol en serpentin, rien n'est caché derrière rien | verre givré |
+
+Recommandation : **C · Plateau** pour la lisibilité (c'est la seule où l'on voit tout le trajet d'un coup d'œil),
+avec le verre **poli** de A. B si l'on tient à l'identité « sand = réel » du miroir.
+
+Limites connues : rendu mobile non traité ; les planches tournent en démo scriptée (pas de `live.js`) ; aperçu : `planches-v9/apercu-v9.jpg`.
+
+**Décision de Gaia (2026-11-12)** : **C · Plateau + verre poli**. Déposé dans `web/` : `scene/labels.js`, `scene/scene.js`,
+`scene/layout.js` (agencement C seul), `scene/shell.js` et `scene/theme.js` réécrits, `scene/reflet8.js` retiré.
+Ajout au dépôt : au repos, l'étiquette porte aussi une petite ligne de mode (démo scriptée / mode réel), pour savoir
+avant tout clic si l'on parle au vrai pare-feu. Vérifié contre `dryrun-gate serve --sim stub` : « injection 49 Ⓝ » → BLOCK R1.
+
+**Changelog V8.3 → V9** : 3 étiquettes → 1 ; étiquette technologies supprimée ; terminal opaque → verre (3 finitions) ;
+textes 3D en perspective → plaques à plat sans chevauchement ; éléments renumérotés 1-7 ; positions refaites (3 agencements) ;
+certificat au-dessus du coffre ; phrases d'étape réécrites.
+
+---
+
 ## Commandes design (rappel)
 
 `/planches N` · `/variantes` · `/delta` · `/cible <écran>` · `/compare A B` · `/lock`

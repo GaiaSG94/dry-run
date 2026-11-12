@@ -19,6 +19,14 @@
 - Reste design : rendu mobile (scène 3D minuscule), section « dépôt dans web/ » de `DESIGN.md`, recapture des planches V8.
 - Reste avant soumission (14/11 23:59 UTC), hors design : bug MCP (49 NEAR avec champ erroné lu comme 1 NEAR), déclaration IA du README (Claude Code / opencode absents), tag `hackathon-submission`, règle « 2 projets max / README cite l'autre », vidéo + post X, formulaire (compte mainnet), déploiement testnet optionnel.
 
+### 2026-11-12 · nuit — V9 en revue (`planches-v9/`)
+
+- Trois planches variantes : A · Ligne, B · Miroir rangé, C · Plateau (`planches-v9/index.html`), aperçu `apercu-v9.jpg`.
+- Communs : une seule étiquette (pitch, puis la phrase de l'étape), menaces en boutons, étiquette technologies supprimée, terminal en verre, 7 étapes numérotées, textes à plat sans chevauchement.
+- Gaia retient **C + verre poli** : déposé dans `web/` (branche `feat/web-plateau-v9`), `reflet8.js` retiré.
+- Vérifié en live (`--sim stub`, port 8791) : connexion, ligne « Mode réel » dans l'étiquette, « injection 49 Ⓝ » → BLOCK R1 rejoué par la scène.
+- Non fait : rendu mobile ; le swap good-dex reste BLOCK R8 avec `--sim stub` (limite du simulateur allégé).
+
 ## opencode
 
 - 2026-11-12 · branche `ui-v8-terminal` (nouvelle, poussée sur origin).

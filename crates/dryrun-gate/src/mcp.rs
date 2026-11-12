@@ -52,7 +52,10 @@ pub fn parse_propose_args(args: &Value) -> Result<(Demande, String), String> {
         .ok_or_else(|| "champ `intent` manquant".to_string())?
         .to_string();
 
-    let kind = obj.get("kind").and_then(Value::as_str).unwrap_or("transfer");
+    let kind = obj
+        .get("kind")
+        .and_then(Value::as_str)
+        .unwrap_or("transfer");
     let demand = match kind {
         "transfer" => {
             let to = obj
