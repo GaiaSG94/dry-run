@@ -411,9 +411,11 @@ Do X → see Y :
    fissure, la chaîne reste intacte, rien n'est signé ;
 3. Menu **scénario → « piège drainer »** (déjà approuvé) → **BLOCK (R8)** : ce
    sont les **effets** qui l'arrêtent, pas une liste blanche ;
-4. Menu **scénario → « geler le coffre »** → `POST /api/freeze` → **FROZEN**,
+4. Menu **scénario → « piège two-face »** → honnête sous 0,1 NEAR, voleur
+   au-dessus : seule la **simulation différentielle (R12)** le démasque ;
+5. Menu **scénario → « geler le coffre »** → `POST /api/freeze` → **FROZEN**,
    toute demande suivante est refusée (`ERR_FROZEN`) ;
-5. **▶ jouer le processus** → le film complet : injection, drainer, vol de
+6. **▶ jouer le processus** → le film complet : injection, drainer, vol de
    clé d'agent rejeté **on-chain** (`ERR_OVER_TX_CAP`), gel, puis le **banc de
    200 robots** (100 honnêtes exécutés, 100 attaques arrêtées, F1 1,00).
 
@@ -421,19 +423,13 @@ Commandes : **espace** = play/pause · **← / →** = ±2 s · **glisser** = or
 **molette** = zoom · **double-clic** = recentrer · `?t=42` = arrêt sur image ·
 `?mode=demo` = forcer le mode démo. Détails : [web/README.md](web/README.md).
 
-### 8.2 Le tableau de bord classique
+### 8.2 Une seule interface
 
-L'ancienne interface 2D reste disponible sur [classic.html](web/classic.html) —
-un repli utile pour les essais libres :
-
-- Visualisation en temps réel de l'état du coffre (solde, plafonds 24 h, état gelé/ouvert) ;
-- Formulaire pour tester une demande interactivement ;
-- **Affichage dynamique de la carte des effets** (rouge si BLOCK, vert si ALLOW) ;
-- **Badge du certificat V1** (condensé SHA-256, signature Ed25519, hauteur, nonce, statut) ;
-- Panneau de **scénarios rapides en 1 clic** (paiement honnête, injection, swap DEX, drainer, skimmer, approver, two-face) ;
-- Accordéon « reçus & logs NEAR détaillés » ;
-- Frise chronologique des décisions prises ;
-- **Bouton de gel d'urgence en un clic** (déclenche la clé de gel).
+La scène 3D est l'interface du projet : pas de second tableau de bord. Tout ce
+qui était dans l'ancien tableau de bord 2D est soit dans la scène (état du
+coffre, certificat, frise des décisions, gel d'urgence, scénarios en 1 clic via
+le menu « scénario »), soit dans la ligne de commande (`make demo`, `make attack`,
+`make sim`, `make mcp`).
 
 ---
 

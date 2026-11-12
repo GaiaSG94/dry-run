@@ -21,9 +21,8 @@ Sol miroir sans motif, vue basse en grand angle, volumes de verre épais.
 « réel » est écrit en haut à gauche et « sand » en bas à gauche, à plat sur
 l'écran. Toute l'identité tient dans `scene/theme.js`.
 
-L'ancienne interface (tableau de bord 2D) reste disponible sur `classic.html`
-(repli sans canvas, mentionné par le message `<noscript>` ; ce n'est plus
-l'interface principale).
+Il n'y a **qu'une seule interface** : la scène 3D. Sans JavaScript, le pare-feu
+se teste en ligne de commande (`make demo`, `make attack`, `make sim`).
 
 ## Deux modes, détectés automatiquement
 
@@ -55,14 +54,13 @@ sans `near-sandbox`).
 | `scene/reflet8.js` | la scène « Le Reflet », pilotée par un thème : `DR.reflet8(DR.THEME)` |
 | `scene/theme.js` | l'identité « Laque noire » : couleurs, sol, lumière, typographie, caméra, étiquette technologies. Seul fichier à modifier pour changer d'identité |
 | `scene/live.js` | mode LIVE : `/api/status`, `/api/log`, `/api/propose`, `/api/freeze`, et la traduction d'une réponse réelle en scénario jouable |
-| `classic.html` + `style.css` + `app.js` | l'ancien tableau de bord 2D (repli) |
 
 ## Do X → see Y (mode LIVE)
 
 1. `cargo run -p dryrun-gate -- serve --port 8787 --sim stub`, ouvrir
    `http://localhost:8787` → badge **`live · stub`** en haut à gauche, le
    terminal affiche `pare-feu connecté · stub`, le menu **scénario** propose
-   les quatre demandes réelles + la démo scriptée, le bouton principal devient
+   les cinq demandes réelles + la démo scriptée, le bouton principal devient
    « démo scriptée ».
 2. Menu → **« swap good-dex »** → la capsule descend dans le reflet, les 5
    sous-étapes s'allument (le terminal les détaille une à une), les effets
@@ -76,9 +74,12 @@ sans `near-sandbox`).
    **côté agent** (le pare-feu ne reformule jamais).
 4. Menu → **« piège drainer »** → **BLOCK (R8)** : les fonds sortent, rien ne
    revient — ce sont les effets qui l'arrêtent, pas une liste blanche.
-5. Menu → **« geler le coffre »** → `POST /api/freeze` → le coffre passe
+5. Menu → **« piège two-face »** → le contrat est honnête sous 0,1 NEAR et
+   voleur au-dessus : seule la **simulation différentielle (R12)** le démasque,
+   la liste blanche ne dit rien de ses deux visages.
+6. Menu → **« geler le coffre »** → `POST /api/freeze` → le coffre passe
    **FROZEN** et toute demande suivante est refusée (`ERR_FROZEN`).
-6. Le coffre affiché (solde, anneau du plafond 24 h, anneau du journal) vient
+7. Le coffre affiché (solde, anneau du plafond 24 h, anneau du journal) vient
    de `GET /api/status`, rafraîchi toutes les 3 s.
 
 ## Do X → see Y (mode DÉMO, sans serveur)

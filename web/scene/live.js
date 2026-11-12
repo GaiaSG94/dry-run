@@ -84,6 +84,25 @@
         },
       },
     },
+    {
+      // Piège 7 (ajouté côté Rust) : honnête sous 0,1 NEAR, voleur au-dessus.
+      // Seule la simulation différentielle (R12) le démasque — l'ancien tableau de bord
+      // le proposait en 1 clic : on garde le même accès depuis le menu « scénario ».
+      id: "two-face", label: "piège two-face", tag: "piège two-face", who: "agent IA",
+      say: "échanger 2 NEAR contre du TEST",
+      to: { id: "two-face.test.near", short: "two-face", type: "contrat à double visage", kind: "hostile" },
+      motif: { receiver: "two-face.test.near", method: "trap", args: "null", deposit: "2 NEAR", gas: "30 Tgas" },
+      intentView: { beneficiaries: "two-face", min_in: "1,9 TEST" },
+      body: {
+        kind: "function_call", contract: "two-face.test.near", method: "trap", args: null,
+        deposit: YO("2").toString(), gas: GAS,
+        intent: {
+          summary: "échanger 2 NEAR contre au moins 1.9 TEST",
+          beneficiaries: ["two-face.test.near"],
+          min_in: [["TEST", TEST_MIN]],
+        },
+      },
+    },
     { id: "freeze", label: "geler le coffre", tag: "gel d’un geste", who: "propriétaire", danger: true, freeze: true },
   ];
 

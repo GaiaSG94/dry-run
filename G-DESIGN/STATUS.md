@@ -26,3 +26,9 @@
   - lien « tableau de bord » retiré du HUD (classic.html reste en repli noscript) ; nav réduite à « aide ».
 - Vérifications : `node --check` sur 9 fichiers JS OK ; test runtime jsdom (faux gate HTTP + canvas stubbé) : 22/22 PASS, 0 erreur (mode live, WARN→confirm→ALLOW, menu, terminal, démo restaurée, banc, playScenario).
 - Répondu à Gaia : la scène + la démo scriptée marchent 100 % côté client hors serveur ; le mode LIVE exige que la page soit servie par `dryrun-gate` (sinon repli démo automatique).
+
+## opencode (suite)
+
+- Suppression du repli classique demandée par Gaia : `web/classic.html`, `web/app.js` et `web/style.css` sont supprimés ; il n'y a plus qu'une interface (la scène 3D). Le message `<noscript>` renvoie désormais vers la ligne de commande (`make demo` / `make attack` / `make sim`).
+- Conséquence Rust : `crates/dryrun-gate/tests/http_api.rs` (`page_index_est_servie`) attendait `app.js` dans la page servie ; l'assertion vérifie désormais `scene/shell.js` (la page servie est la scène).
+- Le scénario **two-face** qui venait d'être ajouté au tableau de bord 2D est porté dans le menu « scénario » de la scène (`web/scene/live.js`) : il ne perd pas son accès 1 clic.

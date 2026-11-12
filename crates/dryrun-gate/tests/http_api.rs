@@ -174,7 +174,11 @@ async fn page_index_est_servie() {
         .await
         .expect("HTML");
     assert!(html.contains("Dry Run") || html.contains("DRY RUN"));
-    assert!(html.contains("app.js"));
+    // la page d'accueil est la scène 3D (web/index.html) : elle charge ses propres modules
+    assert!(
+        html.contains("scene/shell.js"),
+        "la page d'accueil doit charger la scène 3D"
+    );
 }
 
 #[tokio::test]
