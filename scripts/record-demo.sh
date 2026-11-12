@@ -2,18 +2,32 @@
 # scripts/record-demo.sh
 #
 # Automatisation de la démonstration visuelle pour enregistrement vidéo (60s).
-# Déroule la séquence sur l'écran du poste utilisateur (ms7d18) via pc-page.
+# Déroule la séquence sur l'écran d'un poste distant via ssh/pc-page (optionnel).
+#
+# Paramétrage par variables d'environnement (aucune IP / machine en dur) :
+#   DRYRUN_GATE_URL  URL du serveur dryrun-gate  (défaut : http://127.0.0.1:8787)
+#   DRYRUN_DEMO_HOST machine vers laquelle ouvrir la page via ssh/pc-page
+#                    (défaut : vide = étape d'ouverture sautée)
+# Exemple :
+#   DRYRUN_GATE_URL=http://10.0.0.12:8787 DRYRUN_DEMO_HOST=ms7d18 scripts/record-demo.sh
 
 set -euo pipefail
 
-GATE_URL="http://100.124.18.48:8787"
+GATE_URL="${DRYRUN_GATE_URL:-http://127.0.0.1:8787}"
+DEMO_HOST="${DRYRUN_DEMO_HOST:-}"
 
 echo "=== Préparation de la démonstration vidéo Dry Run (60s) ==="
+echo "    Gate : $GATE_URL"
+echo "    Poste : ${DEMO_HOST:-aucun (etape sautee)}"
 
 # 1. Ouvrir la page sur l'écran du poste
-echo "[1/5] Ouverture de l'interface sur le poste de travail..."
-ssh ms7d18 "~/.local/bin/pc-page '$GATE_URL/'" || true
-sleep 3
+if [ -n "$DEMO_HOST" ]; then
+    echo "[1/5] Ouverture de l'interface sur le poste de travail..."
+    ssh "$DEMO_HOST" "~/.local/bin/pc-page '$GATE_URL/'" || true
+    sleep 3
+else
+    echo "[1/5] Étape ouverture d'écran sautée (DRYRUN_DEMO_HOST non défini)."
+fi
 
 # 2. Scénario 1 : Transfert honnête (1 NEAR à bob) -> ALLOW
 echo "[2/5] Déclenchement Scénario 1 : Transfert honnête (ALLOW)..."
