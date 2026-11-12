@@ -9,7 +9,7 @@
 
   const style = document.createElement("style");
   style.textContent = `
-    #term{position:fixed;right:22px;top:64px;bottom:200px;width:min(30vw,400px);z-index:3;
+    #term{position:fixed;right:22px;top:64px;bottom:24px;width:min(30vw,400px);z-index:3;
       display:flex;flex-direction:column;overflow:hidden;border-radius:14px;
       background:rgba(0,0,0,.68);border:1px solid color-mix(in srgb,var(--a,#3DFFB0) 25%,transparent);
       backdrop-filter:blur(14px);box-shadow:0 30px 80px -30px #000}

@@ -21,15 +21,18 @@
     sheen: 2.6, horizon: 1.8,   // reflet du sol et lueur d'horizon
     particles: "none",
     glowK: 1.0, bloom: 0.35,    // halo lumineux, discret : le noir doit rester profond
-    lineK: 0.8, glassA: 0.09,   // traits fins, verre léger
+    lineK: 1.9, glassA: 0.09,   // contours épais et nets, verre léger
+    labelK: 1.3,                // noms des éléments 3D 30 % plus grands
     vault: "monolith", agent: "ring", orb: "pulse",
     ghost: true,                // bouton en contour
     words: "left", word2: "sand", wordStyle: "outline", wordWeight: 200, wordLs: 0.3,
     verdictWeight: 200, verdictLs: 26, verdictPx: 110,
     capWeight: 500, brandWeight: 300,
-    centerY: 0.47,
+    centerY: 0.42,              // centre vertical de la scène, mesuré SOUS le HUD du haut
+    // la phrase qui dit ce que fait Dry Run, affichée en permanence en haut
+    pitch: "<b>Dry Run</b> protège le portefeuille d’un agent IA sur NEAR : chaque transaction est d’abord jouée dans une copie de la chaîne, et n’est signée que si ses effets réels sont sûrs.",
     camera: { pitch: 0.08, fov: 1.12, dist: 21.5, target: [-1.2, 0.3, 0] }, // vue basse, grand angle
-    hello: "le reflet décide. <em>le réel suit.</em>",
+    hello: "choisissez une attaque ci-dessus, ou <em>▶ jouez le processus complet</em>",
     // étiquette blanche des technologies (logos monochromes + noms)
     tech: `${svg(NEAR_PATH)}<span>NEAR</span>${svg(RUST_PATH)}<span>Rust</span><span>·</span><span>Ed25519</span><span>·</span><span>MCP</span>`,
   };

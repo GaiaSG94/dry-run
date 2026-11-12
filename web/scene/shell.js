@@ -40,33 +40,34 @@
       .tr a{color:inherit;opacity:.6;text-decoration:none;border:1px solid color-mix(in srgb,var(--ink) 18%,transparent);
         border-radius:${T.square ? "2px" : "99px"};padding:7px 13px;backdrop-filter:blur(10px);font:500 11px/1 ${DR.MONO}}
       .tr a:hover{opacity:1;border-color:var(--a)}
-      .bc{left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:12px;width:min(94vw,900px)}
-      .tags{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
-      .tag{background:#fff;border-radius:14px;padding:10px 20px;color:color-mix(in srgb,var(--a) 45%,#022b1c);
-        font:${T.capWeight || 600} 16px/1.3 ${FD};text-align:center;max-width:min(72vw,580px);
+      /* tout le HUD est EN HAUT, centré au-dessus de la scène (entre le rail de gauche et le terminal) */
+      .top{top:16px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;width:min(94vw,860px)}
+      .tag{background:#fff;border-radius:16px;padding:12px 22px;color:color-mix(in srgb,var(--a) 45%,#022b1c);
+        font:${T.capWeight || 600} 19px/1.3 ${FD};text-align:center;max-width:100%;box-sizing:border-box;
         box-shadow:0 10px 40px -10px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.25);text-transform:${up}}
-      .tag em{font-style:normal;font-weight:800;color:color-mix(in srgb,var(--a) 62%,#01261a)}
-      .tag.tech{display:flex;align-items:center;gap:7px;border-radius:99px;padding:10px 16px;white-space:nowrap;
-        font:700 12px/1 ${DR.MONO};letter-spacing:.03em;text-transform:none}
-      .tag.tech svg{width:14px;height:14px;fill:currentColor;flex:none}
+      .tag em,.tag b{font-style:normal;font-weight:800;color:color-mix(in srgb,var(--a) 62%,#01261a)}
+      .tag.pitch{font-size:21px;font-weight:600;line-height:1.35;padding:14px 26px}
+      .tag.mode{font:600 14px/1.35 ${FB};padding:8px 18px;border-radius:99px;display:flex;align-items:center;gap:9px}
+      .tag.mode i{width:9px;height:9px;border-radius:50%;flex:none;background:#9aa;box-shadow:none}
+      .tag.mode.live i{background:var(--a);box-shadow:0 0 10px var(--a)}
+      .tag.mode code{font:700 13px ${DR.MONO};color:#022b1c;background:color-mix(in srgb,var(--a) 22%,#fff);padding:1px 6px;border-radius:6px}
+      .tags{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+      .tag.tech{display:flex;align-items:center;gap:7px;border-radius:99px;padding:11px 16px;white-space:nowrap;
+        font:700 12.5px/1 ${DR.MONO};letter-spacing:.03em;text-transform:none}
+      .tag.tech svg{width:15px;height:15px;fill:currentColor;flex:none}
+      /* les attaques : des boutons visibles, sous l'étiquette explicative (plus de menu déroulant) */
+      .chips{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap}
+      .chips .sepv{width:1px;height:26px;background:color-mix(in srgb,var(--ink) 25%,transparent);margin:0 4px}
+      .chip{all:unset;pointer-events:auto;cursor:pointer;font:700 13px/1 ${FB};padding:11px 16px;border-radius:99px;
+        color:var(--a);background:rgba(0,0,0,.55);backdrop-filter:blur(10px);
+        box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--a) 70%,transparent);transition:background .15s,color .15s}
+      .chip:hover{background:var(--a);color:#001a10}
+      .chip.danger{color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.75)}
+      .chip.danger:hover{background:#fff;color:#000}
+      .chip[disabled]{opacity:.4;cursor:wait}
       .bar{display:flex;gap:5px;width:min(80vw,460px)}
       .bar div{flex:1;height:2px;background:color-mix(in srgb,var(--ink) 14%,transparent);overflow:hidden}
       .bar div i{display:block;height:100%;width:0;background:var(--a);box-shadow:0 0 8px var(--a)}
-      .ctl{display:flex;gap:10px;align-items:center}
-      .dd{position:relative}
-      #scen-btn{all:unset;pointer-events:auto;cursor:pointer;font:600 11px/1 ${DR.MONO};letter-spacing:.1em;text-transform:uppercase;
-        padding:12px 18px;border:1px solid color-mix(in srgb,var(--ink) 22%,transparent);border-radius:99px;opacity:.85;transition:border-color .15s,color .15s}
-      #scen-btn:hover{border-color:var(--a);color:var(--a)}
-      #scen-btn[disabled]{opacity:.4;cursor:wait}
-      .dd-menu{pointer-events:auto;position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);
-        min-width:255px;background:#fff;border-radius:16px;padding:7px;display:none;flex-direction:column;gap:2px;
-        box-shadow:0 24px 60px -15px rgba(0,0,0,.85)}
-      .dd.open .dd-menu{display:flex}
-      .dd-menu button{all:unset;cursor:pointer;pointer-events:auto;font:600 13px/1.3 ${FB};color:color-mix(in srgb,var(--a) 45%,#022b1c);padding:9px 12px;border-radius:10px}
-      .dd-menu button:hover{background:color-mix(in srgb,var(--a) 18%,#fff)}
-      .dd-menu button[disabled]{opacity:.4;cursor:wait}
-      .dd-menu button.danger{color:#a03030}
-      .dd-menu hr{border:0;border-top:1px solid rgba(0,0,0,.1);margin:5px 8px}
       #play{all:unset;pointer-events:auto;cursor:pointer;display:flex;align-items:center;gap:12px;padding:16px 36px;
         border-radius:${T.square ? "3px" : "99px"};background:var(--a);color:var(--bg);font:800 15px/1 ${FD};letter-spacing:.08em;text-transform:${up};
         box-shadow:0 0 0 1px rgba(255,255,255,.18),0 14px 60px -12px var(--a);transition:transform .2s}
@@ -78,36 +79,37 @@
       ${T.ghost ? "#play{background:transparent;color:var(--a);box-shadow:inset 0 0 0 1.5px var(--a)}#play.on{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ink) 30%,transparent)}" : ""}
       ${T.capPx ? "#cap{font-size:" + T.capPx + "px}" : ""}
       ${condCss}
-      @media (max-width:760px){.tl span{display:none}.tag{font-size:13px;padding:8px 14px;max-width:88vw}.tag.tech{display:none}#play{padding:13px 24px;font-size:13px}.tl b{font-size:16px}.bc{gap:9px}}
+      .top #play{padding:11px 20px;font-size:13px}
+      @media (max-width:760px){.tag{font-size:14px;padding:8px 14px}.tag.pitch{font-size:15px;padding:10px 14px}.tag.mode{font-size:12px}
+        .tag.tech{display:none}.chip{font-size:12px;padding:9px 12px}.top{gap:7px;top:10px}}
     `;
     document.head.appendChild(style);
     const nav = conf.nav || { next: "README.md", nextL: "aide" };
     document.body.insertAdjacentHTML("beforeend", `
       <canvas id="c"></canvas>
       ${T.letterbox ? '<div class="lb" style="top:0"></div><div class="lb" style="bottom:0"></div>' : ""}<div class="fx vig"></div>${T.scan ? '<div class="fx scan"></div>' : ""}${T.grain ? '<div class="fx grain"></div>' : ""}
-      <div class="hud tl">
+      <div class="hud tl" style="display:none">
         <b>dry<i>·</i>run</b>
         ${conf.idea ? `<span>${conf.idea}</span>` : ""}
         <div class="badge" id="badge"><i></i><span id="badge-t">démo scriptée</span></div>
         ${T.swatch ? `<div class="sw"><u></u>${T.swatch}</div>` : ""}
       </div>
       <div class="hud tr">${nav.links || `<a href="${nav.next}">${nav.nextL}</a>`}</div>
-      <div class="hud bc">
+      <div class="hud top" id="top">
+        ${T.pitch ? `<div class="tag pitch" id="pitch">${T.pitch}</div>` : ""}
+        <div class="tag mode" id="mode"><i></i><span id="mode-t">démo scriptée</span></div>
+        <div class="chips" id="chips"><button id="play" type="button">▶&nbsp; jouer le processus</button><span id="scen-menu" style="display:contents"></span></div>
         <div class="tags">
           <div class="tag" id="cap"></div>
           ${conf.tech ? `<div class="tag tech" id="tech">${conf.tech}</div>` : ""}
         </div>
         <div class="bar" id="bar"></div>
-        <div class="ctl">
-          <div class="dd" id="dd"><button id="scen-btn" type="button">scénario&nbsp;▾</button><div class="dd-menu" id="scen-menu"></div></div>
-          <button id="play" type="button">▶&nbsp; jouer le processus</button>
-        </div>
       </div>`);
 
     const canvas = document.getElementById("c");
     const R = DR.Renderer(canvas, conf);
     const bar = document.getElementById("bar"), cap = document.getElementById("cap"), btn = document.getElementById("play");
-    const dd = document.getElementById("dd"), scenBtn = document.getElementById("scen-btn"), menu = document.getElementById("scen-menu");
+    const menu = document.getElementById("scen-menu"), top = document.getElementById("top");
     const q = new URLSearchParams(location.search);
     let t = q.has("t") ? parseFloat(q.get("t")) : 0;
     let mode = q.has("t") ? "pause" : "idle";
@@ -129,37 +131,34 @@
       pause() { mode = "pause"; setBtn(); },
       stop() { mode = "idle"; t = 0; setBtn(); },
       setBadge(text, live) { document.getElementById("badge-t").textContent = text; document.getElementById("badge").classList.toggle("live", !!live); },
+      // ligne qui dit, avant tout lancement, si l'on regarde un film ou si l'on parle au vrai pare-feu
+      setModeLine(html, live) { document.getElementById("mode-t").innerHTML = html; document.getElementById("mode").classList.toggle("live", !!live); },
       setPlayLabel(text) { conf.playLabel = text; setBtn(); },
       onScenarios: rebuildBars, segs: [], bars: [],
       playScenario(i) { const b = DR.beats.find((x) => x.sc === i); if (b) { t = b.t0; mode = "play"; setBtn(); } },
       setScenarioMenu(items) {
         menu.innerHTML = "";
         (items || []).forEach((it) => {
-          if (it.sep) { menu.insertAdjacentHTML("beforeend", "<hr>"); return; }
+          if (it.sep) { menu.insertAdjacentHTML("beforeend", '<span class="sepv"></span>'); return; }
           const b = document.createElement("button");
           b.type = "button"; b.textContent = it.label;
-          if (it.danger) b.className = "danger";
-          b.addEventListener("click", () => { dd.classList.remove("open"); it.onSelect(); });
+          b.className = "chip" + (it.danger ? " danger" : "");
+          b.addEventListener("click", () => it.onSelect());
           menu.appendChild(b);
         });
       },
-      setMenuBusy(on) { scenBtn.disabled = on; menu.querySelectorAll("button").forEach((b) => { b.disabled = on; }); },
+      setMenuBusy(on) { menu.querySelectorAll("button").forEach((b) => { b.disabled = on; }); },
     };
+    // démo : une puce par scénario du film ; le bouton ▶ joue le film complet
     app.demoMenu = function () {
-      const items = [{ label: "▶ processus complet", onSelect: () => { app.setT(0); app.play(); } }];
-      DR.SCRIPTED.forEach((S, i) => items.push({ label: S.tag, onSelect: () => app.playScenario(i) }));
-      app.setScenarioMenu(items);
+      app.setScenarioMenu(DR.SCRIPTED.map((S, i) => ({ label: S.tag, onSelect: () => app.playScenario(i) })));
     };
     DR.app = app;
     btn.onclick = () => { if (mode === "play") mode = "pause"; else { if (mode === "end") t = 0; mode = "play"; } setBtn(); };
-    scenBtn.addEventListener("click", (e) => { e.stopPropagation(); dd.classList.toggle("open"); });
-    menu.addEventListener("click", (e) => e.stopPropagation());
-    document.addEventListener("click", () => dd.classList.remove("open"));
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" && e.target === document.body) { e.preventDefault(); btn.click(); }
       if (e.key === "ArrowRight") t = Math.min(DR.T, t + 2);
       if (e.key === "ArrowLeft") t = Math.max(0, t - 2);
-      if (e.key === "Escape") dd.classList.remove("open");
     });
     let drag = null;
     canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, yaw: R.user.yaw, pitch: R.user.pitch }; canvas.setPointerCapture(e.pointerId); });
@@ -200,6 +199,11 @@
       const te = document.getElementById("term");
       R.padR = te && te.getClientRects().length ? Math.max(0, R.W - te.getBoundingClientRect().left + 12) : 0;
       R.padL = conf.padLeft ? conf.padLeft(R) : 0;
+      // le HUD du haut se centre au-dessus de la scène, dans l'espace libre ; la scène commence sous lui
+      const freeW = Math.max(200, R.W - R.padL - R.padR);
+      top.style.left = (R.padL + freeW / 2) + "px";
+      top.style.width = Math.min(freeW - 16, 860) + "px";
+      R.padT = top.getBoundingClientRect().bottom + 6;
       R.basis();
       const ctx = R.ctx;
       ctx.setTransform(R.dpr, 0, 0, R.dpr, 0, 0);

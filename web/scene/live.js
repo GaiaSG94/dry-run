@@ -221,19 +221,19 @@
     } catch (err) { fail(err); }
   }
 
-  /* Un seul bouton « scénario » ouvre un petit menu déroulant. */
+  /* Une puce par vraie demande, sous l'étiquette explicative. Le bouton ▶ rejoue le film de démo. */
   function buildMenu() {
-    const items = REQUESTS.map((r) => ({ label: r.label, danger: r.danger, onSelect: () => runRequest(r) }));
-    items.push({ sep: true });
-    items.push({
-      label: "démo scriptée (film complet)",
-      onSelect: () => { DR.setScenarios(DR.SCRIPTED, { bench: true }); DR.app.setT(0); DR.app.play(); },
-    });
-    DR.app.setScenarioMenu(items);
+    DR.app.setScenarioMenu(REQUESTS.map((r) => ({ label: r.label, danger: r.danger, onSelect: () => runRequest(r) })));
+    const play = document.getElementById("play");
+    if (play) play.addEventListener("click", () => {
+      if (DR.scenarios !== DR.SCRIPTED) { DR.setScenarios(DR.SCRIPTED, { bench: true }); DR.app.setT(0); }
+    }, true);
   }
 
   async function init() {
     const forced = new URLSearchParams(location.search).get("mode");
+    const DEMO_LINE = "Démo scriptée : un film des vrais résultats. Pour envoyer de vraies demandes, lancez <code>dryrun-gate serve</code> et ouvrez <code>localhost:8787</code>.";
+    if (DR.app.setModeLine) DR.app.setModeLine(DEMO_LINE, false);
     if (forced === "demo" || location.protocol === "file:") {
       DR.app.setBadge("démo scriptée", false);
       if (DR.term) {
@@ -246,7 +246,11 @@
     try {
       const live = await refreshStatus();
       DR.app.setBadge("live · " + live.backend, true);
-      DR.app.setPlayLabel("▶ démo scriptée");
+      if (DR.app.setModeLine) {
+        DR.app.setModeLine("<b>Mode réel</b> : chaque bouton envoie une vraie demande au pare-feu (" + esc(live.backend) +
+          ") · coffre " + esc(live.account) + " · " + DR.fmt(live.balance, 2) + " NEAR", true);
+      }
+      DR.app.setPlayLabel("▶ film de démo");
       buildMenu();
       if (DR.term) {
         DR.term.setMode("live · " + live.backend, true);

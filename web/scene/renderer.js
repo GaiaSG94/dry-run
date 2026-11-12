@@ -31,7 +31,7 @@
     R.cy = conf.centerY || 0.44;
     // marges réservées (px) : terminal à droite, mots « réel / sand » à gauche.
     // La scène se cadre et se centre dans l'espace libre entre les deux.
-    R.padL = 0; R.padR = 0; R.cx0 = 0;
+    R.padL = 0; R.padR = 0; R.padT = 0; R.cx0 = 0; R.cy0 = 0;
     R.LIGHT = norm([-0.45, 0.8, 0.55]);
     DR.COND = '"Bahnschrift", "DIN Alternate", "Arial Narrow", "Segoe UI", sans-serif';
     const FONT = { sans: DR.SANS, mono: DR.MONO, serif: DR.SERIF, cond: DR.COND };
@@ -55,13 +55,15 @@
       R.eye = eye; R.fw = f; R.rt = r; R.up = cross(r, f); R.D = d;
       const free = Math.max(120, R.W - R.padL - R.padR); // largeur réellement disponible pour la scène
       R.cx0 = R.padL + free / 2;
-      R.F = (Math.min(free, R.H * 1.6) / 2) / Math.tan(c.fov / 2);
+      const freeH = Math.max(160, R.H - R.padT); // hauteur sous le HUD du haut
+      R.cy0 = R.padT + freeH * R.cy;
+      R.F = (Math.min(free, freeH * 1.6) / 2) / Math.tan(c.fov / 2);
     };
     R.p = (x, y, z) => {
       if (Array.isArray(x)) { z = x[2]; y = x[1]; x = x[0]; }
       const v = [x - R.eye[0], y - R.eye[1], z - R.eye[2]];
       const zz = dot(v, R.fw), k = R.F / Math.max(0.05, zz);
-      return { x: R.cx0 + dot(v, R.rt) * k, y: R.H * R.cy - dot(v, R.up) * k, k, z: zz, ok: zz > 0.1 };
+      return { x: R.cx0 + dot(v, R.rt) * k, y: R.cy0 - dot(v, R.up) * k, k, z: zz, ok: zz > 0.1 };
     };
     // brume : 1 devant, T.fog derrière (perspective atmosphérique = profondeur lisible)
     const FOG = T.fog == null ? 0.45 : T.fog;
@@ -216,6 +218,7 @@
       if (!p.ok) return;
       let px = (o.px || 13) * (T.textK || 1);
       if (o.size) px = DR.clamp(o.size * p.k, o.min || 10, o.max || 120);
+      else if (px < 30) px *= T.labelK || 1; // noms des éléments 3D plus grands ; les grands titres ne bougent pas
       if (R.narrow) px *= 0.88;
       const up = T.upper && o.upper !== false && o.font !== "mono";
       const s = up ? String(str).toUpperCase() : String(str);
