@@ -12,6 +12,13 @@
 - Non fait : `make test` / `make lint` (make absent de cette machine ; aucun fichier Rust modifié), commit Git, `DESIGN.md` (section « dépôt dans web/ » à ajouter), halo des autres planches V8 à recapturer, rendu mobile, version three.js.
 - Le paquet `G-DESIGN/web-laque/` n'a pas reçu la correction de `live.js` (il ne devait pas être copié).
 
+### 2026-11-12 · soir — HUD en haut (fusionné)
+
+- PR #1 (cadrage : plus rien sous le terminal) et PR #2 (HUD) **fusionnées dans `main`** (squash, CI verte).
+- PR #2 : étiquette blanche agrandie et en haut, une phrase qui dit ce que fait Dry Run ; bandeau « démo scriptée / vrai pare-feu » visible avant tout lancement ; attaques en boutons sous l'étiquette (fin du menu déroulant) ; contours 3D plus épais, noms plus grands.
+- Reste design : rendu mobile (scène 3D minuscule), section « dépôt dans web/ » de `DESIGN.md`, recapture des planches V8.
+- Reste avant soumission (14/11 23:59 UTC), hors design : bug MCP (49 NEAR avec champ erroné lu comme 1 NEAR), déclaration IA du README (Claude Code / opencode absents), tag `hackathon-submission`, règle « 2 projets max / README cite l'autre », vidéo + post X, formulaire (compte mainnet), déploiement testnet optionnel.
+
 ## opencode
 
 - 2026-11-12 · branche `ui-v8-terminal` (nouvelle, poussée sur origin).
@@ -32,3 +39,13 @@
 - Suppression du repli classique demandée par Gaia : `web/classic.html`, `web/app.js` et `web/style.css` sont supprimés ; il n'y a plus qu'une interface (la scène 3D). Le message `<noscript>` renvoie désormais vers la ligne de commande (`make demo` / `make attack` / `make sim`).
 - Conséquence Rust : `crates/dryrun-gate/tests/http_api.rs` (`page_index_est_servie`) attendait `app.js` dans la page servie ; l'assertion vérifie désormais `scene/shell.js` (la page servie est la scène).
 - Le scénario **two-face** qui venait d'être ajouté au tableau de bord 2D est porté dans le menu « scénario » de la scène (`web/scene/live.js`) : il ne perd pas son accès 1 clic.
+
+## opencode (2026-11-12 · soir) — clone GaiaSG94 + fix MCP
+
+- Dépôt publié en miroir sur <https://github.com/GaiaSG94/dry-run> : repo **neuf** (pas un fork, aucun lien de dépendance affiché), historique complet poussé (`main` + `ui-v8-terminal`).
+- **Fix bug MCP** (`crates/dryrun-gate/src/mcp.rs`) : `wallet_propose` rejette désormais toute demande mal formée AVANT simulation — champ inconnu (ex: `amount` au lieu de `amount_near`), `intent` manquant, montant absent ou non numérique, `kind` inconnu, `to`/`contract`/`method` manquants. Avant : 49 NEAR envoyés avec un champ mal nommé étaient lus comme 1 NEAR et acceptés.
+- Tests : 6 tests d'intégration dans `crates/dryrun-gate/tests/mcp.rs` (dont la régression 49 NEAR) ; suite `cargo test -p dryrun-gate` verte (tous les suites passent).
+- README : §10 déclare Claude Code et opencode dans l'assistance IA ; ligne de période (premier commit 10/11, soumission 14/11 23:59 UTC) ajoutée en tête.
+- `scripts/record-demo.sh` : plus d'IP ni de nom de machine en dur — paramétré par `DRYRUN_GATE_URL` (défaut 127.0.0.1:8787) et `DRYRUN_DEMO_HOST` (vide = étape d'ouverture d'écran sautée). Syntaxe bash vérifiée (git-bash).
+- Tag `hackathon-submission` posé sur `main` et poussé sur les deux remotes.
+- Note opérationnelle : le serveur `dryrun-gate serve --port 8791 --sim stub` tournant a dû être arrêté pour relinker le binaire pendant les tests ; relancé ensuite avec le binaire reconstruit.
