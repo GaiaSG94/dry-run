@@ -378,7 +378,54 @@ cargo run --release -p dryrun-gate -- serve --port 8787
 ./run-server.sh
 ```
 
-Fonctionnalités de l'interface :
+### 8.1 La scène 3D « Le Reflet » (page d'accueil)
+
+Une surface de verre coupe l'espace : **au-dessus, NEAR (le réel) ; en dessous,
+son reflet (le bac à sable)**. Chaque demande se joue d'abord dans le reflet ; si
+elle passe, le même geste se rejoue au-dessus, en miroir : **sand == réel**.
+
+- un **terminal live à droite** dit tout ce qui se passe, clairement et
+  concisément (chaque étape, chaque effet, chaque verdict, les appels réseau
+  réels en mode LIVE) ;
+- un seul bouton **« scénario »** ouvre un **menu déroulant** : on choisit la
+  menace à jouer (ou le film complet) ;
+- en bas, une **étiquette blanche à écriture verte** raconte l'événement en
+  cours, à côté de l'**étiquette des technologies** utilisées (NEAR, Rust,
+  Ed25519, MCP).
+
+Deux modes, détectés automatiquement au chargement :
+
+- **LIVE** (serveur actif) : les scénarios du menu sont réellement proposés au
+  pare-feu, la scène joue les phases avec la vraie réponse (verdict, règles,
+  effets, certificat Ed25519, exécution, hash réel dans le terminal) ;
+- **DÉMO** (page ouverte sans serveur) : le film scripté de `make demo` ; le
+  menu permet aussi d'y jouer chaque scénario séparément.
+
+Do X → see Y :
+
+1. Menu **scénario → « swap good-dex »** → **WARN (R5, premier contact)** → le
+   propriétaire confirme (`confirm:true`) → **re-simulation** → **ALLOW** → le
+   sceau Ed25519 se ferme **7/7** → la transaction part sur la chaîne →
+   **« sand = réel »**, avec le hash réel dans le terminal ;
+2. Menu **scénario → « injection 49 Ⓝ »** → **BLOCK (R1)** : le verre se
+   fissure, la chaîne reste intacte, rien n'est signé ;
+3. Menu **scénario → « piège drainer »** (déjà approuvé) → **BLOCK (R8)** : ce
+   sont les **effets** qui l'arrêtent, pas une liste blanche ;
+4. Menu **scénario → « geler le coffre »** → `POST /api/freeze` → **FROZEN**,
+   toute demande suivante est refusée (`ERR_FROZEN`) ;
+5. **▶ jouer le processus** → le film complet : injection, drainer, vol de
+   clé d'agent rejeté **on-chain** (`ERR_OVER_TX_CAP`), gel, puis le **banc de
+   200 robots** (100 honnêtes exécutés, 100 attaques arrêtées, F1 1,00).
+
+Commandes : **espace** = play/pause · **← / →** = ±2 s · **glisser** = orbite ·
+**molette** = zoom · **double-clic** = recentrer · `?t=42` = arrêt sur image ·
+`?mode=demo` = forcer le mode démo. Détails : [web/README.md](web/README.md).
+
+### 8.2 Le tableau de bord classique
+
+L'ancienne interface 2D reste disponible sur [classic.html](web/classic.html) —
+un repli utile pour les essais libres :
+
 - Visualisation en temps réel de l'état du coffre (solde, plafonds 24 h, état gelé/ouvert) ;
 - Formulaire pour tester une demande interactivement ;
 - **Affichage dynamique de la carte des effets** (rouge si BLOCK, vert si ALLOW) ;
