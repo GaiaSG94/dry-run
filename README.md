@@ -3,6 +3,7 @@
 > **« Every transaction happens twice, the first time for nothing. »**
 >
 > Projet pour le hackathon NEAR — Ticket 06 `security` (« AI Security & Defense »).
+> Période : 10–14 novembre 2026 (premier commit le 10/11, soumission le 14/11 à 23:59 UTC).
 > Développé par **GaiaSG94** (@GaiaSG94).
 > Dépôt public : <https://github.com/GaiaSG94/dry-run>
 
@@ -488,6 +489,7 @@ L'honnêteté vaut mieux qu'une promesse : voici ce qui marche, et ce qui ne mar
 ## 10. Déclaration d'assistance IA & Bibliothèques
 
 - **Assistance IA** : Architecture, code Rust, tests et documentation développés avec l'aide d'agents IA (ZeroClaw / sub-agents hermes, maxed) sous la direction de GaiaSG94. Tout le code a été vérifié, compilé et testé sur machine locale.
+- **Assistance IA (agents de code)** : **Claude Code** (design « Laque noire », HUD web, scène 3D, documentation) et **opencode** (implémentation web, terminal live, tests d'intégration, maintenance MCP), sous la direction de GaiaSG94. Tout le code a été relu, compilé et testé sur machine locale.
 - **Bibliothèques principales** :
   - `near-sdk` 5.30 (smart contracts)
   - `near-sandbox` 0.4 (bac à sable local NEAR)
