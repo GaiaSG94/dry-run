@@ -132,37 +132,50 @@
   }
 
   /* ---------- interface ---------- */
+  const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const log = (txt, kind) => { if (DR.term) DR.term.log(txt, kind); };
   let busy = false;
   function setBusy(on, label) {
     busy = on;
-    document.querySelectorAll("#scen button").forEach((b) => { b.disabled = on; });
-    const note = document.getElementById("brnote");
-    if (note) note.firstChild.nodeValue = on ? (label || "simulation en cours…") : "pare-feu à simulation · NEAR";
+    DR.app.setMenuBusy(on);
+    if (on && label) log(esc(label), "sys");
   }
 
   function fail(err) {
     setBusy(false);
     const cap = document.getElementById("cap");
-    if (cap) cap.innerHTML = "<em>erreur</em> · " + String(err.message || err);
+    if (cap) cap.innerHTML = "<em>erreur</em> · " + esc(String(err.message || err));
     DR.app.setBadge("live · erreur", true);
+    log("erreur : " + esc(String(err.message || err)), "bad");
+  }
+
+  function logOutcome(o) {
+    const v = String(o.verdict || "").toUpperCase();
+    const ids = (o.rules || []).map((r) => r.id).join(" ");
+    log("réponse : <b>" + esc(v) + "</b>" + (ids ? " · " + ids : "") + (o.executed ? " · exécuté" : ""),
+      v === "ALLOW" ? "ok" : v === "BLOCK" ? "bad" : "");
   }
 
   async function runRequest(req) {
     if (busy) return;
     if (req.freeze) return runFreeze();
-    setBusy(true, "simulation en cours…");
+    setBusy(true, "POST /api/propose · " + req.label);
     try {
       const first = await postJSON("/api/propose", req.body);
       const outcomes = [first];
+      logOutcome(first);
       const extra = {};
       if (String(first.verdict).toUpperCase() === "WARN") {
         extra.approveLabel = "le propriétaire confirme — confirm:true";
-        outcomes.push(await postJSON("/api/propose", Object.assign({}, req.body, { confirm: true })));
+        log("WARN → re-simulation avec confirm:true", "sys");
+        const second = await postJSON("/api/propose", Object.assign({}, req.body, { confirm: true }));
+        outcomes.push(second);
+        logOutcome(second);
       }
       const last = outcomes[outcomes.length - 1];
       if (last.cert) extra.certLabel = "certificat " + String(last.cert.digest || "").slice(0, 10) + "…";
       const m = /tx ([0-9A-Za-z]+)/.exec(last.note || "");
-      if (last.executed && m) extra.proofLabel = "simulé == réel · tx " + m[1].slice(0, 12) + "…";
+      if (last.executed && m) extra.proofLabel = "sand = réel · tx " + m[1].slice(0, 12) + "…";
       DR.setScenarios([scenarioFrom(req, outcomes, extra)], { bench: false });
       DR.app.setT(0);
       DR.app.play();
@@ -174,9 +187,10 @@
   async function runFreeze() {
     if (busy) return;
     if (!window.confirm("Geler le coffre ? Toute demande ultérieure sera refusée (ERR_FROZEN).")) return;
-    setBusy(true, "gel en cours…");
+    setBusy(true, "POST /api/freeze · gel d'urgence");
     try {
       await postJSON("/api/freeze");
+      log("coffre gelé · ERR_FROZEN", "bad");
       await refreshStatus();
       DR.setScenarios([{
         id: "freeze", tag: "gel d’un geste", who: "propriétaire", say: "freeze() — clé de gel",
@@ -188,21 +202,25 @@
     } catch (err) { fail(err); }
   }
 
-  function buildButtons() {
-    const box = document.getElementById("scen");
-    box.innerHTML = REQUESTS.map((r, i) =>
-      `<button data-i="${i}" class="${r.danger ? "danger" : ""}">${r.label}</button>`).join("");
-    box.querySelectorAll("button").forEach((b) =>
-      b.addEventListener("click", () => runRequest(REQUESTS[+b.dataset.i])));
+  /* Un seul bouton « scénario » ouvre un petit menu déroulant. */
+  function buildMenu() {
+    const items = REQUESTS.map((r) => ({ label: r.label, danger: r.danger, onSelect: () => runRequest(r) }));
+    items.push({ sep: true });
+    items.push({
+      label: "démo scriptée (film complet)",
+      onSelect: () => { DR.setScenarios(DR.SCRIPTED, { bench: true }); DR.app.setT(0); DR.app.play(); },
+    });
+    DR.app.setScenarioMenu(items);
   }
 
   async function init() {
     const forced = new URLSearchParams(location.search).get("mode");
-    const note = document.getElementById("brnote");
     if (forced === "demo" || location.protocol === "file:") {
       DR.app.setBadge("démo scriptée", false);
-      if (note && location.protocol === "file:") {
-        note.innerHTML = "page ouverte en local — démo scriptée<br>mode live : dryrun-gate serve --port 8787";
+      if (DR.term) {
+        DR.term.setMode("démo", false);
+        log("mode démo — chronologie scriptée (make demo)", "sys");
+        if (location.protocol === "file:") log("page locale · mode live : dryrun-gate serve --port 8787", "sys");
       }
       return;
     }
@@ -210,12 +228,20 @@
       const live = await refreshStatus();
       DR.app.setBadge("live · " + live.backend, true);
       DR.app.setPlayLabel("▶ démo scriptée");
-      buildButtons();
+      buildMenu();
+      if (DR.term) {
+        DR.term.setMode("live · " + live.backend, true);
+        log("pare-feu connecté · " + esc(live.backend) + " · solde " + DR.fmt(live.balance, 2) + " NEAR", "ok");
+      }
       setInterval(() => { if (!busy) refreshStatus().catch(() => {}); }, 3000);
     } catch (err) {
       DR.live = null;
       DR.app.setBadge("démo scriptée", false);
-      if (note) note.innerHTML = "pare-feu injoignable — démo scriptée<br>lancez : dryrun-gate serve --port 8787";
+      if (DR.term) {
+        DR.term.setMode("démo", false);
+        log("pare-feu injoignable — repli sur la démo scriptée", "sys");
+        log("mode live : dryrun-gate serve --port 8787", "sys");
+      }
     }
   }
 

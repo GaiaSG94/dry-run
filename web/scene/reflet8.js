@@ -6,17 +6,17 @@
 (function () {
   "use strict";
   const E = DR.ease, O = DR.out, C = DR.clamp, L = DR.lerp, M = DR.mix3;
-  const VA = [-8.6, 1.3, 0], VB = [-8.6, -1.3, 0], RA = [6.6, 1.3, 0], RB = [6.6, -1.3, 0];
+  const VA = [-8.6, 2.0, 0], VB = [-8.6, -2.0, 0], RA = [7.0, 1.5, 0], RB = [7.0, -1.5, 0];
   const GX = -3.2;
-  const ST = [-1.6, -0.1, 1.4, 2.9, 4.4].map((x) => [x, -1.6, 0]);
+  const ST = [-1.8, -0.2, 1.4, 3.0, 4.6].map((x) => [x, -1.6, 0]);
   const RY = 1.65, RAIL = [-7.2, 5.3];
-  const TK = [-5.45, 3.7, 1.0], TW = 3.0, TH = 2.0;
-  const PORTY = [3.2, 2.65, 2.1];
+  const TK = [-5.45, 4.5, 1.0], TW = 3.7, TH = 2.5;
+  const PORTY = [4.15, 3.4, 2.65];
   const PORT = [GX - 0.05, PORTY[2], 1.5], IN = [GX + 0.6, -1.6, 0];
-  const SEAL = [GX + 1.5, 3.3, 0.8];
-  const ACT = [-11.4, 4.6, 0.8];
+  const SEAL = [GX + 2.6, 3.9, 0.8];
+  const ACT = [-10.9, 4.7, 0.8];
   const BX = 12.6;
-  const HIT = [VA[0] - 0.95, VA[1] + 1.2, 0.95];
+  const HIT = [VA[0] - 1.05, VA[1] + 1.2, 0.95];
   const VC = [0.6, 0.0, 0.6]; // centre du verdict sur le plan
 
   let sd = 7;
@@ -41,7 +41,7 @@
     const appear = (s) => (s.scViewI === 0 ? 1 : C(Math.max(0, s.since("arrive")) / 0.6));
     const ink = T.ink || "#ffffff";
     const FA = T.wire ? 0 : T.glassA == null ? 0.06 : T.glassA;
-    const VSZ = T.vault === "monolith" ? [1.35, 2.9, 1.35] : [1.9, 2.4, 1.9];
+    const VSZ = T.vault === "monolith" ? [2.0, 4.3, 2.0] : [2.4, 3.2, 2.4];
 
     /* ---------- fond : dégradé vertical + particules ---------- */
     function background(R, s) {
@@ -68,7 +68,7 @@
       const a = R.p(-12, 0, 4), b = R.p(14, 0, 4);
       if (!a.ok || !b.ok) return;
       const yAt = (x) => a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x || 1);
-      const W1 = T.upper ? "RÉEL" : "réel", W2 = T.upper ? "SIMULÉ" : "simulé";
+      const W1 = T.word1 || (T.upper ? "RÉEL" : "réel"), W2 = T.word2 || (T.upper ? "SIMULÉ" : "simulé");
       const center = mode === "center";
       const size = center ? C(R.W * 0.15, 60, 280) : C(R.W * 0.06, 30, 100), x = center ? R.W / 2 : R.W - (R.narrow ? 16 : 36);
       const paint = (txt, px, py, col, colA) => {
@@ -84,7 +84,13 @@
       ctx.font = `${T.wordWeight || 900} ${R.cond("display")}${size}px ${R.font("display")}`;
       ctx.letterSpacing = size * (T.wordLs == null ? 0.1 : T.wordLs) + "px";
       const c1 = R.Wh(0.92), c2 = R.A(1), g1 = R.Wh(T.ghostA || 0.1), g2 = R.A((T.ghostA || 0.1) * 1.5);
-      if (mode === "rail") {
+      if (mode === "left") {
+        // colonne de gauche, à plat : « réel » en haut (sous la marque), « sand » en bas
+        const xl = R.narrow ? 16 : 30;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top"; paint(W1, xl, Math.max(128, R.H * 0.15), c1, g1);
+        ctx.textBaseline = "alphabetic"; paint(W2, xl, R.H - 215, c2, g2);
+      } else if (mode === "rail") {
         const y = yAt(x - size * 0.5);
         ctx.translate(x - size * 0.1, y); ctx.rotate(-Math.PI / 2); ctx.textBaseline = "alphabetic";
         ctx.textAlign = "left"; paint(W1, 22, 0, c1, g1);
@@ -131,7 +137,8 @@
 
     /* ---------- le plan de verre ---------- */
     function plane(R, s) {
-      const z0 = -14, z1 = 4, x0 = -14, x1 = 17;
+      // dalle resserrée autour de l'action : les volumes occupent l'essentiel de la plateforme
+      const z0 = -6.5, z1 = 4.3, x0 = -13.5, x1 = 16.5;
       R.poly([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], {
         zb: 2000, nofog: true,
         grad: (ctx, q) => { const g = ctx.createLinearGradient(0, (q[2].y + q[3].y) / 2, 0, (q[0].y + q[1].y) / 2); g.addColorStop(0, R.A(0.11 * (T.sheen || 1))); g.addColorStop(1, R.A(0.01)); return g; },
@@ -180,12 +187,12 @@
       });
       if (pat === "grid" || pat === "neon") {
         const a = pat === "neon" ? R.A(0.16) : R.Wh(0.035);
-        for (let x = -14; x <= 17; x += 1) R.line([x, 0, z0], [x, 0, z1], { stroke: a, zb: 1999 });
-        for (let z = -13.5; z <= 3; z += 1.5) R.line([x0, 0, z], [x1, 0, z], { stroke: a, zb: 1999 });
-        if (pat === "neon") { const sx = -14 + ((c * 5) % 31); R.line([sx, 0, z0], [sx, 0, z1], { stroke: R.A(0.8), lw: 2, glow: 16, zb: 1990 }); }
+        for (let x = x0; x <= x1; x += 1) R.line([x, 0, z0], [x, 0, z1], { stroke: a, zb: 1999 });
+        for (let z = z0 + 0.5; z < z1; z += 1.5) R.line([x0, 0, z], [x1, 0, z], { stroke: a, zb: 1999 });
+        if (pat === "neon") { const sx = x0 + ((c * 5) % (x1 - x0)); R.line([sx, 0, z0], [sx, 0, z1], { stroke: R.A(0.8), lw: 2, glow: 16, zb: 1990 }); }
       }
-      if (pat === "pinstripe") for (let x = -14; x <= 17; x += 0.5) R.line([x, 0, z0], [x, 0, z1], { stroke: R.Wh(x % 2 === 0 ? 0.06 : 0.025), zb: 1999 });
-      if (pat === "dots") for (let x = -14; x <= 17; x += 1) for (let z = -13; z <= 3; z += 1) R.dot([x, 0, z], 0.035, { fill: R.Wh(0.22), zb: 1999 });
+      if (pat === "pinstripe") for (let x = x0; x <= x1; x += 0.5) R.line([x, 0, z0], [x, 0, z1], { stroke: R.Wh(x % 2 === 0 ? 0.06 : 0.025), zb: 1999 });
+      if (pat === "dots") for (let x = x0; x <= x1; x += 1) for (let z = Math.ceil(z0); z <= z1 - 1; z += 1) R.dot([x, 0, z], 0.035, { fill: R.Wh(0.22), zb: 1999 });
       if (pat === "rings") for (let i = 1; i < 26; i++) {
         const r = i * 0.75;
         let seg = [];
@@ -243,15 +250,14 @@
 
     /* ---------- pare-feu ---------- */
     function gate(R, s) {
-      const h = 4.0, d = 2.6;
-      R.box([GX, 0, 0], [0.55, 2 * h, 2 * d], { shade: true, fa: FA * 0.7, tint: T.accent, stroke: R.A(0.55), lw: 1.3 });
+      const h = 5.2, d = 3.3;
+      R.box([GX, 0, 0], [0.7, 2 * h, 2 * d], { shade: true, fa: FA * 0.7, tint: T.accent, stroke: R.A(0.55), lw: 1.3 });
       const sweep = (s.clock * 0.6) % 1; // reflet qui glisse sur la membrane
       R.line([GX, -h + sweep * 2 * h, -d], [GX, -h + sweep * 2 * h, d], { stroke: R.A(0.35), lw: 1.5, glow: 10 });
-      R.text([GX + 0.3, h - 0.15, 1.8], "pare-feu", { px: 17, weight: 800, ls: 1, align: "left", font: "display", color: R.Wh(0.97) });
       DR.surfaces.forEach((sf, i) => {
         const y = PORTY[i], on = sf.id === "MCP" && (s.ph === "send" || s.ph === "mcp");
-        R.box([GX, y, 1.5], [0.85, 0.42, 0.9], { shade: true, fa: on ? 0.5 : 0.08, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.45) });
-        R.text([GX + 0.35, y, 1.8], sf.id, { px: 11.5, font: "mono", weight: 700, align: "left", color: on ? R.A(1) : R.Wh(0.6) });
+        R.box([GX, y, 1.5], [1.15, 0.56, 1.2], { shade: true, fa: on ? 0.5 : 0.08, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.45) });
+        R.text([GX + 0.45, y, 2.2], sf.id, { px: 13, font: "mono", weight: 700, align: "left", color: on ? R.A(1) : R.Wh(0.6) });
       });
     }
 
@@ -277,7 +283,7 @@
     function vault(R, s, twin) {
       const VN = DR.vaultNow(s);
       const c = twin ? VB : VA, a = twin ? tw(s) : 1, sg = twin ? -1 : 1, fr = VN.frozen && !twin;
-      if (!twin) { R.shadow(c, 1.7, VSZ[1], 0.65); R.pool([c[0], 0.01, c[2]], 2.6, fr ? ink : T.accent, 0.22); }
+      if (!twin) { R.shadow(c, 2.2, VSZ[1], 0.65); R.pool([c[0], 0.01, c[2]], 3.3, fr ? ink : T.accent, 0.22); }
       vaultShape(R, c, { fa: fr ? 0.3 : FA * (twin ? 0.8 : 1), tint: twin ? T.accent : ink, stroke: fr ? R.Wh(1) : twin ? R.A(0.65 * a) : R.Wh(0.7), lw: fr ? 2.2 : 1.4, alpha: twin ? Math.max(0.35, a) : 1 });
       // réserve
       let bal = VN.balance;
@@ -292,59 +298,49 @@
       else if (T.vault === "hex") R.prism(lc, 0.9, Math.max(0.02, hh), 6, lo, 0.52);
       else R.box(lc, [VSZ[0] - 0.3, Math.max(0.02, hh), VSZ[2] - 0.3], Object.assign({ shade: true }, lo));
       if (twin) {
-        R.text([c[0], c[1] - VSZ[1] / 2 - 0.5, 1.0], "jumeau", { px: 15, weight: 800, font: "display", color: R.A(0.95 * a) });
         if (s.ph === "sandbox" && s.sub >= 1) {
-          const p = [c[0] + 1.25, c[1] - 0.2, 1.0], f = s.sub === 1 ? C(s.subP * 3) : C(1 - (s.sub - 1 + s.subP) * 0.7);
-          R.halo(p, 0.5, T.accent, 0.6 * f);
-          R.text([p[0] + 0.35, p[1], p[2]], "clé jetable", { px: 13, font: "mono", weight: 700, align: "left", color: R.A(f) });
+          const p = [c[0] + 1.55, c[1] - 0.2, 1.0], f = s.sub === 1 ? C(s.subP * 3) : C(1 - (s.sub - 1 + s.subP) * 0.7);
+          R.halo(p, 0.6, T.accent, 0.6 * f);
         }
         return;
       }
       // fenêtre 24 h et journal (pur visuel)
       const used = VN.dailyCap > 0n ? Math.round(Number((VN.spent * 24n) / VN.dailyCap)) : 0;
-      for (let i = 0; i < 24; i++) { const a0 = (i / 24) * Math.PI * 2 + s.clock * 0.05, a1 = a0 + ((Math.PI * 2) / 24) * 0.68, on = i < used; thick(R, [c[0], c[1] + 0.3, c[2]], 1.55, "y", a0, a1, 0.24, { seg: 60, fa: on ? 0.65 : 0.1, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.3), lw: 1.1, glow: on ? 8 : 0 }); }
-      for (let i = 0; i < 100; i++) { const an = (i / 100) * Math.PI * 2; R.dot([c[0] + Math.cos(an) * 1.9, 0.02, c[2] + Math.sin(an) * 1.9], 0.035, { fill: i < VN.journal ? R.A(1) : R.Wh(0.15) }); }
-      // libellés : peu, gros
-      const lx = c[0] - 1.8;
-      R.text([lx, 2.3, 1], "coffre", { px: 16, weight: 800, font: "display", align: "right", color: R.Wh(0.95) });
-      R.text([lx, 1.85, 1], DR.fmt(VN.balance, 0) + " NEAR", { px: 24, weight: 800, font: "mono", align: "right", color: fr ? R.Wh(1) : R.A(1), glow: 10 });
-      R.text([lx, 1.42, 1], "2 / tx · 10 / 24 h", { px: 12.5, font: "mono", align: "right", color: R.Wh(0.6) });
-      const gelOn = !!s.scView.freeze;
-      [["execute", 1.2, false], ["freeze", 0.88, gelOn]].forEach(([k, y, on]) => {
-        const p = [c[0] - 0.6, y, c[2] + 1.0];
-        R.dot(p, 0.08, { fill: on ? R.Wh(1) : R.A(0.95), glow: on ? 16 : 6 });
-        R.text([p[0] + 0.2, y, p[2]], k, { px: 11.5, font: "mono", align: "left", color: on ? R.Wh(1) : R.Wh(0.75) });
-      });
-      R.text([c[0] - 0.68, 0.56, c[2] + 1.0], "0 FullAccess", { px: 11, font: "mono", align: "left", color: R.Wh(0.45) });
-      if (fr) R.text([c[0], c[1] + 0.35, c[2] + 1.1], "FROZEN", { px: 28, weight: 900, ls: 5, font: "display", color: R.Wh(1), glow: 22, glowColor: R.Wh(0.7) });
-      bracket(R, c, 1.1, 1.3, "VAULT");
+      for (let i = 0; i < 24; i++) { const a0 = (i / 24) * Math.PI * 2 + s.clock * 0.05, a1 = a0 + ((Math.PI * 2) / 24) * 0.68, on = i < used; thick(R, [c[0], c[1] + 0.4, c[2]], 2.15, "y", a0, a1, 0.3, { seg: 60, fa: on ? 0.65 : 0.1, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.3), lw: 1.1, glow: on ? 8 : 0 }); }
+      for (let i = 0; i < 100; i++) { const an = (i / 100) * Math.PI * 2; R.dot([c[0] + Math.cos(an) * 2.6, 0.02, c[2] + Math.sin(an) * 2.6], 0.04, { fill: i < VN.journal ? R.A(1) : R.Wh(0.15) }); }
+      // libellés : le minimum, en gros
+      const lx = c[0] - 2.4;
+      R.text([lx, 3.15, 1], "coffre", { px: 18, weight: 800, font: "display", align: "right", color: R.Wh(0.95) });
+      R.text([lx, 2.55, 1], DR.fmt(VN.balance, 0) + " NEAR", { px: 30, weight: 800, font: "mono", align: "right", color: fr ? R.Wh(1) : R.A(1), glow: 10 });
+      if (fr) R.text([c[0], c[1] + 0.35, c[2] + 1.1], "FROZEN", { px: 34, weight: 900, ls: 5, font: "display", color: R.Wh(1), glow: 22, glowColor: R.Wh(0.7) });
+      bracket(R, c, 1.5, 1.75, "VAULT");
       agent(R, s, c);
     }
     function agent(R, s, c) {
-      const ag = [c[0], 3.7, 0], dim = s.scView.bypass ? 0.3 : 1, pulse = s.ph === "arrive" && !s.scView.bypass ? 0.5 + 0.5 * Math.sin(s.clock * 6) : 0;
+      const ag = [c[0], c[1] + VSZ[1] / 2 + 1.25, 0], dim = s.scView.bypass ? 0.3 : 1, pulse = s.ph === "arrive" && !s.scView.bypass ? 0.5 + 0.5 * Math.sin(s.clock * 6) : 0;
       const sp = s.clock * 0.8, style = T.agent || "octa";
-      R.halo(ag, 1.1, T.accent, (0.25 + pulse * 0.3) * dim);
+      R.halo(ag, 1.4, T.accent, (0.25 + pulse * 0.3) * dim);
       if (style === "octa") {
-        const r = 0.42, rot = (v) => [v[0] * Math.cos(sp) - v[2] * Math.sin(sp), v[1], v[0] * Math.sin(sp) + v[2] * Math.cos(sp)];
+        const r = 0.56, rot = (v) => [v[0] * Math.cos(sp) - v[2] * Math.sin(sp), v[1], v[0] * Math.sin(sp) + v[2] * Math.cos(sp)];
         const P6 = [[0, r * 1.45, 0], [0, -r * 1.45, 0], [r, 0, 0], [-r, 0, 0], [0, 0, r], [0, 0, -r]].map((v) => DR.v.add(ag, rot(v)));
         [[0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2], [1, 2, 4], [1, 4, 3], [1, 3, 5], [1, 5, 2]].forEach((f) => R.poly(f.map((i) => P6[i]), { fill: R.A((0.14 + pulse * 0.25) * dim), stroke: R.A(0.95 * dim), lw: 1.1 }));
       } else if (style === "orb") {
-        R.dot(ag, 0.38, { fill: R.A(0.18 * dim), stroke: R.A(0.95 * dim), lw: 1.4 });
-        R.circle(ag, 0.62, "y", { stroke: R.A(0.7 * dim), lw: 1.2 }, 48);
-        R.dot([ag[0] + Math.cos(sp * 2) * 0.62, ag[1], ag[2] + Math.sin(sp * 2) * 0.62], 0.07, { fill: R.Wh(dim) });
+        R.dot(ag, 0.5, { fill: R.A(0.18 * dim), stroke: R.A(0.95 * dim), lw: 1.4 });
+        R.circle(ag, 0.8, "y", { stroke: R.A(0.7 * dim), lw: 1.2 }, 48);
+        R.dot([ag[0] + Math.cos(sp * 2) * 0.8, ag[1], ag[2] + Math.sin(sp * 2) * 0.8], 0.09, { fill: R.Wh(dim) });
       } else if (style === "ring") {
-        const p1 = R.ring(ag, 0.5, "y", 48).map((v) => [v[0], ag[1] + (v[2] - ag[2]) * Math.sin(sp), ag[2] + (v[2] - ag[2]) * Math.cos(sp)]);
+        const p1 = R.ring(ag, 0.66, "y", 48).map((v) => [v[0], ag[1] + (v[2] - ag[2]) * Math.sin(sp), ag[2] + (v[2] - ag[2]) * Math.cos(sp)]);
         R.path(p1, { stroke: R.A(0.95 * dim), lw: 1.6 });
-        R.circle(ag, 0.5, "z", { stroke: R.A(0.6 * dim), lw: 1.2 }, 48);
-        R.dot(ag, 0.12, { fill: R.A(dim), glow: 14 });
+        R.circle(ag, 0.66, "z", { stroke: R.A(0.6 * dim), lw: 1.2 }, 48);
+        R.dot(ag, 0.15, { fill: R.A(dim), glow: 14 });
       } else {
-        const r = 0.33, rot = (v) => [v[0] * Math.cos(sp) - v[2] * Math.sin(sp), v[1], v[0] * Math.sin(sp) + v[2] * Math.cos(sp)];
+        const r = 0.44, rot = (v) => [v[0] * Math.cos(sp) - v[2] * Math.sin(sp), v[1], v[0] * Math.sin(sp) + v[2] * Math.cos(sp)];
         const V = [[-r, -r, -r], [r, -r, -r], [r, r, -r], [-r, r, -r], [-r, -r, r], [r, -r, r], [r, r, r], [-r, r, r]].map((v) => DR.v.add(ag, rot(v)));
         [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]].forEach(([i, j]) => R.line(V[i], V[j], { stroke: R.A(0.95 * dim), lw: 1.4 }));
         if (!T.wire) [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [3, 2, 6, 7], [0, 3, 7, 4], [1, 2, 6, 5]].forEach((f, fi) => R.poly(f.map((i) => V[i]), { fill: R.A((0.1 + 0.08 * (fi % 3)) * dim) }));
       }
-      R.text([ag[0], ag[1] + 0.95, 0], s.scView.bypass ? "agent · clé volée" : "agent IA", { px: 16, weight: 800, font: "display", color: R.Wh(0.25 + 0.72 * dim) });
-      R.line([ag[0], ag[1] - 0.7, 0], [c[0], c[1] + VSZ[1] / 2, 0], { stroke: R.A(0.3 * dim), dash: [3, 5] });
+      R.text([ag[0], ag[1] + 1.15, 0], s.scView.bypass ? "agent · clé volée" : "agent IA", { px: 19, weight: 800, font: "display", color: R.Wh(0.25 + 0.72 * dim) });
+      R.line([ag[0], ag[1] - 0.95, 0], [c[0], c[1] + VSZ[1] / 2, 0], { stroke: R.A(0.3 * dim), dash: [3, 5] });
     }
     function recipient(R, s, twin) {
       const S = s.scView;
@@ -352,41 +348,42 @@
       const c = twin ? RB : RA, a = (twin ? tw(s) : 1) * appear(s), sg = twin ? -1 : 1;
       const o = { fa: FA * 0.9, tint: twin ? T.accent : ink, stroke: twin ? R.A(0.7 * a) : R.Wh(0.65 * a), lw: 1.3, alpha: Math.max(0.3, a) };
       const got = !twin && s.reached("proof");
-      if (!twin) { R.shadow(c, 1.5, 2.3, 0.55); R.pool([c[0], 0.01, c[2]], 2.3, got ? T.accent : ink, got ? 0.3 : 0.08); }
-      if (S.to.kind === "dex") R.prism(c, 0.95, 2.3, 6, o, 0.5 + s.clock * 0.15);
+      if (!twin) { R.shadow(c, 1.9, 2.9, 0.55); R.pool([c[0], 0.01, c[2]], 2.9, got ? T.accent : ink, got ? 0.3 : 0.08); }
+      if (S.to.kind === "dex") R.prism(c, 1.3, 3.0, 6, o, 0.5 + s.clock * 0.15);
       else if (S.to.kind === "attacker") {
-        const ap = [c[0], c[1] + sg * 1.3, c[2]], b = c[1] - sg * 1.15, sp = s.clock * 0.3;
-        const B = [0, 1, 2, 3].map((i) => { const an = sp + (i / 4) * Math.PI * 2; return [c[0] + Math.cos(an) * 0.95, b, c[2] + Math.sin(an) * 0.95]; });
+        const ap = [c[0], c[1] + sg * 1.75, c[2]], b = c[1] - sg * 1.55, sp = s.clock * 0.3;
+        const B = [0, 1, 2, 3].map((i) => { const an = sp + (i / 4) * Math.PI * 2; return [c[0] + Math.cos(an) * 1.25, b, c[2] + Math.sin(an) * 1.25]; });
         for (let i = 0; i < 4; i++) R.poly([ap, B[i], B[(i + 1) % 4]], { fill: R.Wh(0.05 * a), stroke: o.stroke, lw: 1.3 });
       } else {
-        R.box(c, [1.9, 2.3, 1.9], Object.assign({ shade: true }, o));
-        R.box(c, [0.8, 1.0, 0.8], { fill: "rgba(0,0,0,0.75)", stroke: o.stroke });
+        R.box(c, [2.6, 3.0, 2.6], Object.assign({ shade: true }, o));
+        R.box(c, [1.05, 1.35, 1.05], { fill: "rgba(0,0,0,0.75)", stroke: o.stroke });
       }
       if (!twin) {
-        R.text([c[0], 3.4, 1.0], S.to.short, { px: 19, weight: 800, font: "display", color: R.Wh(0.97 * a) });
-        R.text([c[0], 2.98, 1.0], S.to.type, { px: 12.5, font: "mono", color: R.Wh(0.55 * a) });
+        const top = c[1] + 1.55;
+        R.text([c[0], top + 1.05, 1.0], S.to.short, { px: 22, weight: 800, font: "display", color: R.Wh(0.97 * a) });
+        R.text([c[0], top + 0.62, 1.0], S.to.type, { px: 13.5, font: "mono", color: R.Wh(0.55 * a) });
         if (got && S.passes.length) {
           const P = S.passes[S.passes.length - 1], g = P.effects.find((e) => e.acc !== "vault");
-          if (g) R.text([c[0], c[1], 1.3], "+" + DR.fmt(g.d, 2) + " " + g.u, { px: 22, font: "mono", weight: 800, color: R.A(C(s.since("proof") / 0.4)), glow: 16 });
+          if (g) R.text([c[0], c[1], 1.3], "+" + DR.fmt(g.d, 2) + " " + g.u, { px: 26, font: "mono", weight: 800, color: R.A(C(s.since("proof") / 0.4)), glow: 16 });
         }
-        bracket(R, c, 1.05, 1.25, S.to.type.toUpperCase());
+        bracket(R, c, 1.45, 1.65, S.to.type.toUpperCase());
       } else if (s.reached("sandbox") && (s.ph !== "sandbox" || s.sub >= 3)) {
-        [0, 1].forEach((k) => { const ok = !(S.id === "drainer" && k === 1); R.text([c[0], c[1] + 0.45 - k * 0.4, 1.05], ok ? "reçu ✓" : "0 TEST", { px: 13, font: "mono", weight: 700, color: ok ? R.A(0.95 * a) : R.Wh(0.85 * a) }); });
+        [0, 1].forEach((k) => { const ok = !(S.id === "drainer" && k === 1); R.text([c[0], c[1] + 0.6 - k * 0.5, 1.35], ok ? "reçu ✓" : "0 TEST", { px: 15, font: "mono", weight: 700, color: ok ? R.A(0.95 * a) : R.Wh(0.85 * a) }); });
       }
     }
 
     /* ---------- chaîne ---------- */
     function rail(R, s) {
       const n = 16, run = s.ph === "chain" ? E(C((s.p - 0.12) / 0.88)) : s.reached("chain") ? 1 : 0;
-      R.box([(RAIL[0] + RAIL[1]) / 2, RY - 0.32, -0.3], [RAIL[1] - RAIL[0] + 0.7, 0.1, 0.6], { shade: true, fa: FA * 0.6, tint: ink, stroke: R.Wh(0.2) }); // le rail qui porte les blocs
+      R.box([(RAIL[0] + RAIL[1]) / 2, RY - 0.32, -0.3], [RAIL[1] - RAIL[0] + 0.7, 0.12, 0.75], { shade: true, fa: FA * 0.6, tint: ink, stroke: R.Wh(0.2) }); // le rail qui porte les blocs
       for (let i = 0; i < n; i++) {
         const x = L(RAIL[0], RAIL[1], i / (n - 1)), u = i / (n - 1), on = run > u;
         const pop = on && s.ph === "chain" ? 1 + 0.35 * Math.max(0, 1 - (run - u) * 8) : 1;
-        R.box([x, RY, -0.3], [0.38 * pop, 0.38 * pop, 0.38 * pop], { shade: true, fa: on ? 0.55 : FA * 0.6, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.25), glow: on ? 8 : 0 });
+        R.box([x, RY, -0.3], [0.52 * pop, 0.52 * pop, 0.52 * pop], { shade: true, fa: on ? 0.55 : FA * 0.6, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.25), glow: on ? 8 : 0 });
       }
-      R.text([L(RAIL[0], RAIL[1], 0.62), RY + 0.5, -0.3], "chaîne NEAR", { px: 12, font: "mono", color: R.Wh(0.45) });
+      R.text([L(RAIL[0], RAIL[1], 0.62), RY + 0.7, -0.3], "chaîne NEAR", { px: 13.5, font: "mono", color: R.Wh(0.45) });
       const blk = s.since("blocked") >= 0 ? s.since("blocked") : s.since("onchain");
-      if (blk >= 0) R.text([L(RAIL[0], RAIL[1], 0.62), RY + 0.95, -0.3], "intacte", { px: 18, weight: 900, ls: 3, font: "display", color: R.Wh(C(blk / 0.6)) });
+      if (blk >= 0) R.text([L(RAIL[0], RAIL[1], 0.62), RY + 1.25, -0.3], "intacte", { px: 22, weight: 900, ls: 3, font: "display", color: R.Wh(C(blk / 0.6)) });
     }
 
     /* ---------- bac à sable : 5 anneaux ---------- */
@@ -394,11 +391,11 @@
       const inSand = s.ph === "sandbox";
       DR.sandboxSteps.forEach((st, i) => {
         const done = s.reached("sandbox") && (!inSand || s.sub > i || (s.sub === i && s.subP > 0.35)), cur = inSand && s.sub === i;
-        R.circle(ST[i], 0.58, "x", { fill: T.wire ? null : done ? R.A(0.1) : R.Wh(0.012) }, 44);
-        thick(R, ST[i], 0.58, "x", 0, Math.PI * 2, 0.4, { fa: done ? 0.42 : 0.12, stroke: done ? R.A(0.95) : R.A(0.35), lw: cur ? 2.6 : 1.3, glow: cur ? 16 : 0 });
-        if (cur) { const a0 = s.clock * 4; R.circle(ST[i], 0.78, "x", { stroke: R.A(0.9), lw: 2.5, glow: 12 }, 16, a0, a0 + 1.4); }
+        R.circle(ST[i], 0.75, "x", { fill: T.wire ? null : done ? R.A(0.1) : R.Wh(0.012) }, 44);
+        thick(R, ST[i], 0.75, "x", 0, Math.PI * 2, 0.55, { fa: done ? 0.42 : 0.12, stroke: done ? R.A(0.95) : R.A(0.35), lw: cur ? 2.6 : 1.3, glow: cur ? 16 : 0 });
+        if (cur) { const a0 = s.clock * 4; R.circle(ST[i], 1.0, "x", { stroke: R.A(0.9), lw: 2.5, glow: 12 }, 16, a0, a0 + 1.4); }
         const lbl = ["clone", "clé", "joué", "reçus", "diff"][i];
-        R.text([ST[i][0], -2.5, 0.6], lbl, { px: cur ? (T.upper ? 14 : 17) : T.upper ? 10.5 : 12.5, ls: T.upper ? -0.6 : 0, weight: cur ? 800 : 600, font: cur ? "display" : "body", color: cur ? R.A(1) : R.Wh(done ? 0.85 : 0.4), glow: cur ? 10 : 0 });
+        R.text([ST[i][0], -2.85, 0.6], lbl, { px: cur ? (T.upper ? 15 : 18.5) : T.upper ? 11 : 13.5, ls: T.upper ? -0.6 : 0, weight: cur ? 800 : 600, font: cur ? "display" : "body", color: cur ? R.A(1) : R.Wh(done ? 0.85 : 0.4), glow: cur ? 10 : 0 });
       });
       [IN, ...ST].forEach((p, i, a) => i && R.line(a[i - 1], p, { stroke: R.A(0.28), dash: [2, 4] }));
     }
@@ -409,14 +406,14 @@
       if (!S.motif) return;
       const a = appear(s) * (s.ph === "mcp" ? 0.35 : 1), dim = s.reached("send") || S.bypass ? 0.6 : 1, c = TK, w = TW, h = TH;
       const sl = O(C(Math.max(0, s.since("arrive")) / 0.7) + (s.scViewI === 0 ? 1 : 0)), cc = [c[0], c[1] + (1 - sl) * 0.6, c[2]];
-      R.box(cc, [w, h, 0.5], { shade: true, fa: T.wire ? 0 : 0.09, tint: ink, stroke: S.bypass ? R.Wh(0.75 * a) : R.A(0.8 * a * dim), lw: 1.3, alpha: a });
-      const m = S.motif, it = S.intent || { beneficiaries: "—", min_in: "—" }, x0 = cc[0] - w / 2 + 0.2;
-      const o = { size: 0.175, min: 11, max: 15, font: "mono", align: "left", color: R.Wh(0.92 * a * dim), zb: -0.2 };
-      R.text([x0, cc[1] + 0.62, cc[2] + 0.28], "→ " + m.receiver, { ...o, weight: 700, color: S.bypass ? R.Wh(a) : R.A(a * dim) });
-      R.text([x0, cc[1] + 0.24, cc[2] + 0.28], m.method + "  " + m.args, o);
-      R.text([x0, cc[1] - 0.14, cc[2] + 0.28], m.deposit + " · " + m.gas, o);
-      R.text([x0, cc[1] - 0.58, cc[2] + 0.28], "min " + it.min_in + " · " + it.beneficiaries, { ...o, color: R.Wh(0.6 * a * dim) });
-      R.text([cc[0], cc[1] + h / 2 + 0.42, cc[2]], S.say, { size: 0.21, min: 13, max: 19, weight: 600, font: "display", color: R.Wh(0.92 * a) });
+      R.box(cc, [w, h, 0.55], { shade: true, fa: T.wire ? 0 : 0.09, tint: ink, stroke: S.bypass ? R.Wh(0.75 * a) : R.A(0.8 * a * dim), lw: 1.3, alpha: a });
+      const m = S.motif, it = S.intent || { beneficiaries: "—", min_in: "—" }, x0 = cc[0] - w / 2 + 0.25;
+      const o = { size: 0.21, min: 12, max: 17, font: "mono", align: "left", color: R.Wh(0.92 * a * dim), zb: -0.2 };
+      R.text([x0, cc[1] + 0.78, cc[2] + 0.3], "→ " + m.receiver, { ...o, weight: 700, color: S.bypass ? R.Wh(a) : R.A(a * dim) });
+      R.text([x0, cc[1] + 0.28, cc[2] + 0.3], m.method + "  " + m.args, o);
+      R.text([x0, cc[1] - 0.22, cc[2] + 0.3], m.deposit + " · " + m.gas, o);
+      R.text([x0, cc[1] - 0.72, cc[2] + 0.3], "min " + it.min_in + " · " + it.beneficiaries, { ...o, color: R.Wh(0.6 * a * dim) });
+      R.text([cc[0], cc[1] + h / 2 + 0.52, cc[2]], S.say, { size: 0.25, min: 14, max: 22, weight: 600, font: "display", color: R.Wh(0.92 * a) });
     }
 
     /* ---------- la demande en vol ---------- */
@@ -458,8 +455,8 @@
       if (!P) return;
       const out = P.effects.find((e) => e.acc === "vault" && e.d < 0n), inn = P.effects.find((e) => e.acc === "vault" && e.u !== "NEAR");
       const fl = [];
-      if (out) fl.push({ a0: VB[0] + 1.05, a1: RB[0] - 1.05, depth: 3.05, z: 0.4, label: "− " + DR.fmt(-out.d, 2) + " NEAR", lx: -5.6 });
-      if (inn) fl.push({ a0: RB[0] - 1.05, a1: VB[0] + 1.05, depth: 3.65, z: 0.9, label: (inn.d === 0n ? "0 " : "+ " + DR.fmt(inn.d, 2) + " ") + inn.u, lx: -4.3, zero: inn.d === 0n });
+      if (out) fl.push({ a0: VB[0] + 1.2, a1: RB[0] - 1.4, depth: 3.05, z: 0.4, label: "− " + DR.fmt(-out.d, 2) + " NEAR", lx: -5.6 });
+      if (inn) fl.push({ a0: RB[0] - 1.4, a1: VB[0] + 1.2, depth: 3.65, z: 0.9, label: (inn.d === 0n ? "0 " : "+ " + DR.fmt(inn.d, 2) + " ") + inn.u, lx: -4.3, zero: inn.d === 0n });
       const draw = (sg, k, al, real) => fl.forEach((f) => {
         const n = 56, pts = [];
         for (let i = 0; i <= Math.round(n * k); i++) { const u = i / n; pts.push([L(f.a0, f.a1, u), sg * (0.5 + Math.sin(u * Math.PI) * (f.depth - 0.5)), f.z]); }
@@ -469,11 +466,11 @@
         if (!f.zero && !T.wire) for (let i = 0; i + 1 < pts.length; i += 4) { const j = Math.min(pts.length - 1, i + 4); R.poly([...e1.slice(i, j + 1), ...e2.slice(i, j + 1).reverse()], { fill: R.A(0.3 * al) }); }
         [e1, e2].forEach((e) => R.path(e, { stroke: f.zero ? R.Wh(0.65 * al) : R.A(al), lw: 2, dash: f.zero ? [5, 7] : null, glow: real ? 14 : 5 }));
         if (k >= 1 && !f.zero) for (let j = 0; j < 3; j++) { const u = (s.clock * 0.35 + j / 3) % 1; R.dot([L(f.a0, f.a1, u), sg * (0.5 + Math.sin(u * Math.PI) * (f.depth - 0.5)), f.z], 0.1, { fill: R.Wh(al), glow: 12 }); }
-        if (k > 0.6 && !real) { const u = (f.lx - f.a0) / (f.a1 - f.a0); R.text([f.lx, sg * (0.5 + Math.sin(u * Math.PI) * (f.depth - 0.5)) - sg * 0.38, f.z], f.label, { px: 19, font: "mono", weight: 800, color: f.zero ? R.Wh(0.95 * al) : R.A(al), glow: f.zero ? 0 : 8 }); }
+        if (k > 0.6 && !real) { const u = (f.lx - f.a0) / (f.a1 - f.a0); R.text([f.lx, sg * (0.5 + Math.sin(u * Math.PI) * (f.depth - 0.5)) - sg * 0.38, f.z], f.label, { px: 21, font: "mono", weight: 800, color: f.zero ? R.Wh(0.95 * al) : R.A(al), glow: f.zero ? 0 : 8 }); }
       });
       if (s.reached("effects", s.lastPass)) draw(-1, O(C(s.since("effects", s.lastPass) / 1.1)), tw(s), false);
       if (s.reached("chain")) draw(1, O(C(s.since("chain") / 1.5)), 1, true);
-      if (s.reached("proof")) R.text([0.6, 0.9, 1.2], "simulé = réel", { px: 40, weight: 900, ls: 2, font: "display", color: R.A(O(C(s.since("proof") / 0.6))), glow: 30 });
+      if (s.reached("proof")) R.text([0.6, 0.9, 1.2], "sand = réel", { px: 46, weight: 900, ls: 2, font: "display", color: R.A(O(C(s.since("proof") / 0.6))), glow: 30 });
     }
 
     /* ---------- règles ---------- */
@@ -483,22 +480,21 @@
         const x = L(x0, x1, i / 11), bit = s.rules.includes(r.id), ok5 = r.id === "R5" && S.passes.length > 1 && s.reached("approve");
         const near = scanning >= 0 && Math.abs(scanning * 1.08 - (i + 0.5) / 12) < 0.05;
         // chaque règle est un plot posé sur la dalle ; celui qui mord se dresse
-        const hot = bit && !ok5, hgt = hot ? 0.3 + 0.9 * O(C(s.since("rules", s.lastPass) / 0.9 + 0.15)) : near ? 0.6 : 0.2;
-        R.box([x, hgt / 2, z - 0.15], [0.32, hgt, 0.32], { shade: true, fa: hot ? 0.65 : near ? 0.5 : 0.16, tint: hot ? ink : T.accent, stroke: hot ? R.Wh(1) : near ? R.A(1) : R.A(0.5), lw: 1.2 });
-        R.text([x, -0.32, z], r.id, { px: bit ? 15 : 11.5, font: "mono", weight: bit ? 800 : 500, color: bit && !ok5 ? R.Wh(1) : near || ok5 ? R.A(1) : R.Wh(0.45), glow: bit && !ok5 ? 14 : 0, glowColor: R.Wh(0.7) });
-        if (bit && !ok5) R.text([x, -0.72, z], r.k, { px: 16, weight: 800, font: "display", color: R.Wh(1) });
-        if (ok5 && s.lastPass === 0) R.text([x, -0.72, z], "approuvé", { px: 14, weight: 700, color: R.A(1) });
+        const hot = bit && !ok5, hgt = hot ? 0.35 + 1.15 * O(C(s.since("rules", s.lastPass) / 0.9 + 0.15)) : near ? 0.7 : 0.25;
+        R.box([x, hgt / 2, z - 0.15], [0.4, hgt, 0.4], { shade: true, fa: hot ? 0.65 : near ? 0.5 : 0.16, tint: hot ? ink : T.accent, stroke: hot ? R.Wh(1) : near ? R.A(1) : R.A(0.5), lw: 1.2 });
+        R.text([x, -0.32, z], r.id, { px: bit ? 16 : 12.5, font: "mono", weight: bit ? 800 : 500, color: bit && !ok5 ? R.Wh(1) : near || ok5 ? R.A(1) : R.Wh(0.45), glow: bit && !ok5 ? 14 : 0, glowColor: R.Wh(0.7) });
+        if (bit && !ok5) R.text([x, -0.72, z], r.k, { px: 18, weight: 800, font: "display", color: R.Wh(1) });
+        if (ok5 && s.lastPass === 0) R.text([x, -0.72, z], "approuvé", { px: 15, weight: 700, color: R.A(1) });
       });
       if (scanning >= 0) { const x = L(x0, x1, C(scanning * 1.08)); R.line([x, 0.02, z - 0.7], [x, 0.02, z + 0.3], { stroke: R.A(1), lw: 2.5, glow: 18 }); }
       if (S.diff && s.reached("rules", S.passes.length - 1)) {
-        const k = O(C(s.since("rules", S.passes.length - 1) / 0.8)), bx = -7.0, by = -3.0, bz = 1.4;
-        R.text([bx + 0.95, by + 0.45, bz], "R12 · ×1 / ×1/100", { px: 12, font: "mono", color: R.Wh(0.65 * k) });
+        const k = O(C(s.since("rules", S.passes.length - 1) / 0.8)), bx = -5.4, by = -3.5, bz = 1.6;
         [[S.diff.full], [S.diff.small]].forEach(([v], j) => {
-          const y = by - j * 0.4;
-          const ln = Math.max(0.03, 1.9 * (v / 1000) * k);
-          R.box([bx + 0.95, y, bz], [1.9, 0.22, 0.22], { shade: true, fa: 0.05, tint: ink, stroke: R.Wh(0.2) });
-          R.box([bx + ln / 2, y, bz], [ln, 0.22, 0.22], { shade: true, fa: 0.7, tint: T.accent, stroke: R.A(1) });
-          R.text([bx + 2.1, y, bz], v + " ‰", { px: 13, font: "mono", weight: 700, align: "left", color: R.A(0.95) });
+          const y = by - j * 0.45;
+          const ln = Math.max(0.03, 2.3 * (v / 1000) * k);
+          R.box([bx + 1.15, y, bz], [2.3, 0.26, 0.26], { shade: true, fa: 0.05, tint: ink, stroke: R.Wh(0.2) });
+          R.box([bx + ln / 2, y, bz], [ln, 0.26, 0.26], { shade: true, fa: 0.7, tint: T.accent, stroke: R.A(1) });
+          R.text([bx + 2.5, y, bz], v + " ‰", { px: 14, font: "mono", weight: 700, align: "left", color: R.A(0.95) });
         });
       }
     }
@@ -513,99 +509,91 @@
       if (v === "BLOCK") R.text(c, "BLOCK", { ...o, color: R.Wh(1), glow: 20, glowColor: R.Wh(0.5) });
     }
 
-    function actor(R, label, sub, shape) {
+    function actor(R, label, shape) {
       const p = ACT;
-      R.halo(p, 1.0, ink, 0.18);
-      if (shape === "owner") { R.dot(p, 0.22, { fill: R.Wh(0.95), glow: 14, glowColor: R.Wh(0.6) }); R.circle([p[0], p[1] - 0.55, p[2]], 0.34, "z", { stroke: R.Wh(0.85), lw: 1.8 }, 20, Math.PI, Math.PI * 2); }
-      if (shape === "thief") { const sp = [[p[0], p[1] + 0.6, p[2]], [p[0] - 0.4, p[1] - 0.4, p[2] - 0.3], [p[0] + 0.4, p[1] - 0.4, p[2] - 0.3], [p[0], p[1] - 0.4, p[2] + 0.4]]; [[0, 1, 2], [0, 2, 3], [0, 3, 1]].forEach((f) => R.poly(f.map((i) => sp[i]), { fill: R.Wh(0.12), stroke: R.Wh(0.95), lw: 1.4 })); }
-      if (shape === "phone") R.box(p, [0.6, 1.05, 0.26], { shade: true, fa: 0.12, tint: ink, stroke: R.Wh(0.95), lw: 1.5 });
-      R.text([p[0], p[1] + 0.95, p[2]], label, { px: 17, weight: 800, font: "display", color: R.Wh(0.97) });
-      if (sub) R.text([p[0], p[1] - 1.1, p[2]], sub, { px: 12, font: "mono", color: R.Wh(0.65) });
+      R.halo(p, 1.25, ink, 0.18);
+      if (shape === "owner") { R.dot(p, 0.28, { fill: R.Wh(0.95), glow: 14, glowColor: R.Wh(0.6) }); R.circle([p[0], p[1] - 0.7, p[2]], 0.44, "z", { stroke: R.Wh(0.85), lw: 1.8 }, 20, Math.PI, Math.PI * 2); }
+      if (shape === "thief") { const sp = [[p[0], p[1] + 0.75, p[2]], [p[0] - 0.52, p[1] - 0.5, p[2] - 0.38], [p[0] + 0.52, p[1] - 0.5, p[2] - 0.38], [p[0], p[1] - 0.5, p[2] + 0.5]]; [[0, 1, 2], [0, 2, 3], [0, 3, 1]].forEach((f) => R.poly(f.map((i) => sp[i]), { fill: R.Wh(0.12), stroke: R.Wh(0.95), lw: 1.4 })); }
+      if (shape === "phone") R.box(p, [0.78, 1.35, 0.34], { shade: true, fa: 0.12, tint: ink, stroke: R.Wh(0.95), lw: 1.5 });
+      R.text([p[0], p[1] + 1.15, p[2]], label, { px: 19, weight: 800, font: "display", color: R.Wh(0.97) });
     }
     function approve(R, s) {
       const S = s.scView;
       if (S.passes.length < 2 || !s.reached("approve") || (s.reached("sandbox", 1) && s.since("sandbox", 1) > 1.5)) return;
       const k = s.ph === "approve" ? s.p : 1;
-      actor(R, "propriétaire", "approve_contract · 1 yocto", "owner");
+      actor(R, "propriétaire", "owner");
       R.line(ACT, M(ACT, HIT, E(k)), { stroke: R.Wh(0.85), lw: 2, dash: [6, 5] });
       R.halo(M(ACT, HIT, E(k)), 0.4, ink, 0.8);
     }
     function cert(R, s) {
       if (!s.reached("cert") || (s.reached("chain") && s.since("chain") > 0.4)) return;
       const inC = s.ph === "cert", n = inC ? s.sub + (s.subP > 0.5 ? 1 : 0) : 7, rot = s.clock * 0.6;
-      for (let i = 0; i < 7; i++) { const a0 = rot - Math.PI / 2 + (i / 7) * Math.PI * 2 + 0.06, a1 = a0 + (Math.PI * 2) / 7 - 0.12, on = i < n; thick(R, SEAL, 0.8, "z", a0, a1, 0.4, { seg: 42, fa: on ? 0.6 : 0.08, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.28), lw: 1.8, glow: on ? 12 : 0 }); }
-      R.halo(SEAL, 1.2, T.accent, 0.25);
-      R.text([SEAL[0] + 1.05, SEAL[1] + 0.18, SEAL[2]], s.certLabel || "certificat", { px: 16, weight: 800, font: "display", align: "left", color: R.Wh(0.95) });
-      R.text([SEAL[0] + 1.05, SEAL[1] - 0.22, SEAL[2]], inC ? (s.sub + 1) + "/7 · " + DR.certChecks[s.sub].k : "7/7 · Ed25519", { px: 13, font: "mono", align: "left", color: R.A(1) });
+      for (let i = 0; i < 7; i++) { const a0 = rot - Math.PI / 2 + (i / 7) * Math.PI * 2 + 0.06, a1 = a0 + (Math.PI * 2) / 7 - 0.12, on = i < n; thick(R, SEAL, 1.05, "z", a0, a1, 0.5, { seg: 42, fa: on ? 0.6 : 0.08, tint: on ? T.accent : ink, stroke: on ? R.A(1) : R.Wh(0.28), lw: 1.8, glow: on ? 12 : 0 }); }
+      R.halo(SEAL, 1.6, T.accent, 0.25);
+      R.text([SEAL[0] + 1.4, SEAL[1] + 0.28, SEAL[2]], s.certLabel || "certificat", { px: 18, weight: 800, font: "display", align: "left", color: R.Wh(0.95) });
+      R.text([SEAL[0] + 1.4, SEAL[1] - 0.32, SEAL[2]], inC ? (s.sub + 1) + "/7 · " + DR.certChecks[s.sub].k : "7/7 · Ed25519", { px: 14, font: "mono", align: "left", color: R.A(1) });
     }
     function mcp(R, s) {
       const S = s.scView;
       if (!S.mcp || !s.reached("mcp")) return;
-      const k = s.ph === "mcp" ? s.p : 1, a = [GX - 0.1, PORTY[2], 1.5], b = [VA[0] + 0.4, 3.6, 0.3], pts = [];
+      const k = s.ph === "mcp" ? s.p : 1, a = [GX - 0.1, PORTY[2], 1.5], b = [VA[0] + 0.5, 4.8, 0.3], pts = [];
       for (let i = 0; i <= 48; i++) { const u = i / 48, p = M(a, b, u); p[1] += Math.sin(u * Math.PI) * 2.3; p[2] += Math.sin(u * Math.PI) * 1.2; pts.push(p); }
       R.path(pts, { stroke: R.Wh(0.85), lw: 2, dash: [7, 6] });
       R.halo(pts[Math.min(48, Math.floor(E(k) * 48))], 0.45, ink, 0.9);
-      R.text([-11.6, 5.75, 1.0], "boucle de l’agent · MCP", { align: "left", px: 17, weight: 800, font: "display", color: R.Wh(0.97) });
-      R.text([-11.6, 5.35, 1.0], "wallet_explain · le pare-feu ne reformule jamais", { align: "left", px: 12, font: "mono", color: R.Wh(0.6) });
+      R.text([-11.9, 5.55, 1.0], "boucle agent · MCP", { align: "left", px: 19, weight: 800, font: "display", color: R.Wh(0.97) });
     }
     function theft(R, s) {
       const S = s.scView;
       if (!S.bypass) return;
-      actor(R, "voleur", "clé d’agent volée", "thief");
+      actor(R, "voleur", "thief");
       const kb = s.ph === "bypass" ? E(s.p) : s.reached("onchain") ? 1 : 0;
       if (kb > 0) R.line(ACT, M(ACT, HIT, kb), { stroke: R.Wh(0.95), lw: 2.4, dash: [7, 5] });
       if (s.reached("onchain")) {
         const k = C(s.since("onchain") / 0.4);
-        R.text([VA[0], VA[1] + 0.3, 1.3], S.onchainErr, { px: 19, font: "mono", weight: 800, color: R.Wh(k), glow: 20, glowColor: R.Wh(0.6) });
-        R.text([VA[0], VA[1] - 0.15, 1.3], "refus on-chain", { px: 13, weight: 700, color: R.Wh(0.8 * k) });
+        R.text([VA[0], VA[1] + 0.3, 1.3], S.onchainErr, { px: 21, font: "mono", weight: 800, color: R.Wh(k), glow: 20, glowColor: R.Wh(0.6) });
+        R.text([VA[0], VA[1] - 0.15, 1.3], "refus on-chain", { px: 15, weight: 700, color: R.Wh(0.8 * k) });
       }
     }
     function freeze(R, s) {
       if (!s.scView.freeze) return;
       const k = s.k("freeze");
-      actor(R, "téléphone", "clé de gel", "phone");
+      actor(R, "téléphone", "phone");
       R.line(ACT, M(ACT, HIT, E(C(k * 2.2))), { stroke: R.Wh(1), lw: 2.4, glow: 14, glowColor: R.Wh(0.6) });
-      if (k > 0.5) R.text([VA[0], VA[1] - 0.95, 1.3], "ERR_FROZEN", { px: 14, font: "mono", weight: 700, color: R.Wh(0.85) });
+      if (k > 0.5) R.text([VA[0], VA[1] - 0.95, 1.3], "ERR_FROZEN", { px: 16, font: "mono", weight: 700, color: R.Wh(0.85) });
     }
 
     /* ---------- banc ---------- */
     function bench(R, s) {
       if (s.ph !== "bench" && s.ph !== "end") return;
-      const b = s.bench, cx = BX, sp = 0.3;
-      const slot = (n, up) => [cx - 1.35 + (n % 10) * sp, up ? 0.9 + Math.floor(n / 10) * sp : -0.9 - Math.floor(n / 10) * sp, 0];
-      R.box([cx, 2.25, 0], [3.3, 3.2, 0.45], { shade: true, fa: FA * 0.4, tint: ink, stroke: R.Wh(0.18) });
-      R.box([cx, -2.25, 0], [3.3, 3.2, 0.45], { shade: true, fa: FA * 0.5, tint: T.accent, stroke: R.A(0.3) });
+      const b = s.bench, cx = BX, sp = 0.35;
+      const slot = (n, up) => [cx - 1.55 + (n % 10) * sp, up ? 1.15 + Math.floor(n / 10) * sp : -1.15 - Math.floor(n / 10) * sp, 0];
+      R.box([cx, 2.85, 0], [4.3, 4.2, 0.5], { shade: true, fa: FA * 0.4, tint: ink, stroke: R.Wh(0.18) });
+      R.box([cx, -2.85, 0], [4.3, 4.2, 0.5], { shade: true, fa: FA * 0.5, tint: T.accent, stroke: R.A(0.3) });
       let up = 0, dn = 0;
       DR.benchRobots.forEach((rb, j) => {
         const idx = rb.atk ? dn++ : up++, k = C((b - (j / 200) * 0.78) / 0.18);
         if (k <= 0) return;
-        const tg = slot(idx, !rb.atk), st = [cx + (((j * 37) % 9) - 4) * 0.35, 5.6, (((j * 13) % 5) - 2) * 0.3], to = [tg[0], 0, 0];
-        R.dot(k < 0.5 ? M(st, to, k * 2) : M(to, tg, (k - 0.5) * 2), 0.085, { fill: rb.atk ? R.Wh(0.92) : R.A(1), glow: k < 1 ? 8 : 0 });
+        const tg = slot(idx, !rb.atk), st = [cx + (((j * 37) % 9) - 4) * 0.35, 6.6, (((j * 13) % 5) - 2) * 0.3], to = [tg[0], 0, 0];
+        R.dot(k < 0.5 ? M(st, to, k * 2) : M(to, tg, (k - 0.5) * 2), 0.1, { fill: rb.atk ? R.Wh(0.92) : R.A(1), glow: k < 1 ? 8 : 0 });
       });
-      const a = Math.max(0.35, C((b - 0.75) / 0.25)), mx = cx + 1.95;
-      R.text([cx, 4.45, 0], "200 robots", { px: 22, weight: 900, font: "display", color: R.Wh(0.97) });
-      R.text([mx, 2.5, 0], "100 honnêtes", { px: 17, weight: 800, font: "display", align: "left", color: R.A(a) });
-      R.text([mx, 2.05, 0], "TN 100 · FP 0", { px: 13, font: "mono", align: "left", color: R.A(a) });
-      R.text([mx, -2.0, 0], "100 attaques", { px: 17, weight: 800, font: "display", align: "left", color: R.Wh(a) });
-      R.text([mx, -2.45, 0], "TP 100 · FN 0", { px: 13, font: "mono", align: "left", color: R.Wh(a) });
-      R.text([mx, 0.3, 0], "F1 1,00", { px: 30, font: "mono", weight: 900, align: "left", color: R.A(a), glow: 16 });
-      R.text([mx, -0.25, 0], "précision 1,00 · rappel 1,00 · 2 µs p95", { px: 12, font: "mono", align: "left", color: R.Wh(0.6 * a) });
-      R.text([mx, -0.6, 0], DR.traps.map((t) => t.id).join(" · "), { px: 11, font: "mono", align: "left", color: R.Wh(0.4 * a) });
+      const a = Math.max(0.35, C((b - 0.75) / 0.25)), mx = cx + 2.5;
+      R.text([cx, 5.5, 0], "200 robots", { px: 26, weight: 900, font: "display", color: R.Wh(0.97) });
+      R.text([mx, 3.2, 0], "100 honnêtes", { px: 19, weight: 800, font: "display", align: "left", color: R.A(a) });
+      R.text([mx, 2.7, 0], "TN 100 · FP 0", { px: 14, font: "mono", align: "left", color: R.A(a) });
+      R.text([mx, -2.6, 0], "100 attaques", { px: 19, weight: 800, font: "display", align: "left", color: R.Wh(a) });
+      R.text([mx, -3.1, 0], "TP 100 · FN 0", { px: 14, font: "mono", align: "left", color: R.Wh(a) });
+      R.text([mx, 0.35, 0], "F1 1,00", { px: 34, font: "mono", weight: 900, align: "left", color: R.A(a), glow: 16 });
     }
 
     const cam = Object.assign({ yaw: -0.32, pitch: 0.2, dist: 22.5, fov: 0.98, target: [-1.2, -0.35, 0] }, T.camera || {});
     DR.mount({
       id: T.id, name: T.name, accent: T.accent, bg: T.bg, theme: T, nav: T.nav,
-      idea: T.idea, hello: T.hello, legend: T.legend || [
-        ["exécuté", `background:${T.accent}`],
-        ["WARN", `border:1.5px solid ${ink};box-sizing:border-box`],
-        ["BLOCK", `background:linear-gradient(135deg,transparent 42%,${ink} 42% 58%,transparent 58%)`],
-      ],
+      idea: T.idea, hello: T.hello, tech: T.tech, centerY: T.centerY,
       camera: cam,
       cameraAt(s) {
         const ph = s.ph, P = T.camK || 1;
         const Y = cam.yaw;
-        if (ph === "bench" || ph === "end") return { target: [11.8, 0.4, 0], dist: 19, yaw: Y + 0.05 * P, pitch: cam.pitch * 0.6 };
+        if (ph === "bench" || ph === "end") return { target: [10.3, 0.4, 0], dist: 17.5, yaw: Y + 0.05 * P, pitch: cam.pitch * 0.6 };
         if (ph === "sandbox" || ph === "effects") return { target: [-0.8, -0.55, 0], dist: cam.dist - 0.5, pitch: cam.pitch * 0.75, yaw: Y + 0.1 * P };
         if (ph === "rules" || ph === "verdict") return { target: [-0.6, -0.5, 0.5], dist: cam.dist - 1, pitch: cam.pitch * 1.1, yaw: Y + 0.08 * P };
         if (ph === "cert" || ph === "chain" || ph === "proof") return { target: [-0.8, 0.3, 0], dist: cam.dist + 0.5, pitch: cam.pitch * 1.4, yaw: Y - 0.06 * P };

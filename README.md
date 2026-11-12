@@ -354,7 +354,7 @@ dry-run/
 │   ├── trap-approver/               # Piège 5 : tentative d'approbation NFT
 │   ├── trap-shapeshifter/           # Piège 6 : altération de code
 │   └── trap-two-face/               # Piège 7 : honnête sous un seuil, voleur au-dessus (R12)
-├── web/                             # Interface graphique locale (carte en direct, frise, bouton de gel, scénarios 1-clic)
+├── web/                             # Interface graphique locale (scène 3D, terminal live, menu scénario, bouton de gel)
 ├── scripts/                         # Scripts de déploiement testnet et d'enregistrement vidéo
 └── docs/
     ├── SPEC.md                      # Spécification d'interface (Niveau M)
