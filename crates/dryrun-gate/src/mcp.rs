@@ -17,6 +17,93 @@ use serde_json::{json, Value};
 
 use crate::gate::Gatekeeper;
 
+/// Champs acceptés par l'outil `wallet_propose`.
+const PROPOSE_FIELDS: &[&str] = &[
+    "kind",
+    "to",
+    "amount_near",
+    "contract",
+    "method",
+    "args",
+    "deposit_near",
+    "intent",
+];
+
+/// Analyse et valide strictement les arguments de `wallet_propose`.
+///
+/// Toute demande mal formée est rejetée avant simulation : champ inconnu,
+/// `intent` manquant, champ de montant absent ou non numérique. Aucun
+/// défaut silencieux : un montant oublié ne doit jamais devenir 1 NEAR.
+pub fn parse_propose_args(args: &Value) -> Result<(Demande, String), String> {
+    let obj = args
+        .as_object()
+        .ok_or_else(|| "les arguments doivent être un objet JSON".to_string())?;
+    for key in obj.keys() {
+        if !PROPOSE_FIELDS.contains(&key.as_str()) {
+            return Err(format!(
+                "champ inconnu `{key}` — champs acceptés : {}",
+                PROPOSE_FIELDS.join(", ")
+            ));
+        }
+    }
+    let intent = obj
+        .get("intent")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "champ `intent` manquant".to_string())?
+        .to_string();
+
+    let kind = obj.get("kind").and_then(Value::as_str).unwrap_or("transfer");
+    let demand = match kind {
+        "transfer" => {
+            let to = obj
+                .get("to")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "champ `to` requis pour un transfert".to_string())?;
+            let amount_near = obj
+                .get("amount_near")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    "champ `amount_near` manquant : montant absent refusé (en NEAR décimal, ex: \"1.5\")"
+                        .to_string()
+                })?;
+            let amount = crate::cli::parse_near(amount_near)
+                .map_err(|e| format!("montant invalide `{amount_near}` : {e}"))?;
+            Demande::Transfer {
+                to: to.to_string(),
+                amount,
+            }
+        }
+        "function_call" => {
+            let contract = obj
+                .get("contract")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "champ `contract` requis pour un appel de contrat".to_string())?;
+            let method = obj
+                .get("method")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "champ `method` requis pour un appel de contrat".to_string())?;
+            let deposit = match obj.get("deposit_near").and_then(Value::as_str) {
+                Some(text) => crate::cli::parse_near(text)
+                    .map_err(|e| format!("dépôt invalide `{text}` : {e}"))?,
+                None => 0,
+            };
+            Demande::FunctionCall {
+                contract: contract.to_string(),
+                method: method.to_string(),
+                args: obj.get("args").cloned().unwrap_or(json!({})),
+                deposit,
+                gas: 30_000_000_000_000,
+            }
+        }
+        other => {
+            return Err(format!(
+                "kind inconnu `{other}` — attendu `transfer` ou `function_call`"
+            ))
+        }
+    };
+    Ok((demand, intent))
+}
+
 /// Boucle principale du serveur MCP sur stdin/stdout.
 pub async fn run_mcp_server(gate: Arc<Gatekeeper>) -> anyhow::Result<()> {
     let stdin = std::io::stdin();
@@ -130,7 +217,7 @@ pub async fn run_mcp_server(gate: Arc<Gatekeeper>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_tool_call(gate: &Gatekeeper, name: &str, args: &Value) -> String {
+pub async fn handle_tool_call(gate: &Gatekeeper, name: &str, args: &Value) -> String {
     match name {
         "wallet_status" => match gate.status().await {
             Ok(s) => format!(
@@ -154,30 +241,13 @@ async fn handle_tool_call(gate: &Gatekeeper, name: &str, args: &Value) -> String
             explain_rule(rule)
         }
         "wallet_propose" => {
-            let intent_text = args.get("intent").and_then(Value::as_str).unwrap_or("opération");
-            let kind = args.get("kind").and_then(Value::as_str).unwrap_or("transfer");
-
-            let demand = if kind == "function_call" {
-                let contract = args.get("contract").and_then(Value::as_str).unwrap_or("good-dex.test.near");
-                let method = args.get("method").and_then(Value::as_str).unwrap_or("swap");
-                let deposit_near = args.get("deposit_near").and_then(Value::as_str).unwrap_or("0");
-                let deposit = crate::cli::parse_near(deposit_near).unwrap_or(0);
-                Demande::FunctionCall {
-                    contract: contract.to_string(),
-                    method: method.to_string(),
-                    args: args.get("args").cloned().unwrap_or(json!({})),
-                    deposit,
-                    gas: 30_000_000_000_000,
-                }
-            } else {
-                let to = args.get("to").and_then(Value::as_str).unwrap_or("bob.test.near");
-                let amount_near = args.get("amount_near").and_then(Value::as_str).unwrap_or("1");
-                let amount = crate::cli::parse_near(amount_near).unwrap_or(10u128.pow(24));
-                Demande::Transfer { to: to.to_string(), amount }
+            let (demand, intent_text) = match parse_propose_args(args) {
+                Ok(pair) => pair,
+                Err(message) => return format!("REJET (demande mal formée) : {message}"),
             };
 
             let intent = Intent {
-                summary: intent_text.to_string(),
+                summary: intent_text,
                 beneficiaries: vec![demand.target().unwrap_or("bob.test.near").to_string()],
                 min_in: vec![],
                 max_out: None,
