@@ -53,6 +53,13 @@ make sim
 make mcp
 ```
 
+> **Platform note.** The outputs below come from the **full simulator** (`near-sandbox`), which runs
+> on **Linux x86-64, Linux aarch64 and macOS arm64**. On any other platform (e.g. Windows), Dry Run
+> falls back to the in-memory light simulator: `make demo` then stops at step [5] with
+> `Error: une transaction sans certificat a été exécutée` (exit code 1), and `make attack` reports
+> **4/7 traps stopped, 2/7 expected rules fired** (exit code 1) instead of 7/7. The 7/7 figures
+> below are the full-simulator ones. The CI runs the unit tests and `make sim` on Linux.
+
 ### What you will see (`make demo`)
 
 ```text
@@ -116,6 +123,7 @@ The CLI prints this in French; the MCP server and the web page also speak Englis
 
   7/7 traps stopped before signing.
   7/7 times the expected rule fired.
+  (full simulator — Linux/macOS; on the light simulator see the platform note above)
 ```
 
 Each trap is played **after** the owner has approved the contract: the worst case for the
@@ -144,7 +152,7 @@ firewall. The rule that fires is the one that describes the observed effect, not
 |                             |                           |   Vault contract         |
 |  - plays as the vault       |                           |   - on-chain caps        |
 |  - extracts Effects         |                           |   - known registry       |
-|  - applies R1 to R11        |                           |   - watertight freeze    |
+|  - applies R1 to R12        |                           |   - watertight freeze    |
 |  - returns a Decision       |                           |   - on_done callback     |
 +-----------------------------+                           +--------------------------+
        |                                                                 ^
@@ -210,7 +218,9 @@ Facing a trap contract (`skimmer`):
 
 ## 5. The corpus of trap contracts (`make attack`)
 
-Each contract is played twice: first against a wallet without a firewall (control), then through Dry Run.
+Each trap contract is played **once through Dry Run**; the **control** (a bare wallet without a
+firewall) is played **after** the whole corpus, on the protected vault, to show what the same call
+does without the gate (see section 9 bis).
 
 | Contract | What it does | Without firewall (bare) | Through Dry Run | Rule |
 |---|---|---|---|---|
@@ -223,7 +233,8 @@ Each contract is played twice: first against a wallet without a firewall (contro
 | `two-face` | Honest under 0.1 NEAR, a thief above | 95 % of the tokens diverted | **Refused** before signing | `R12` |
 | Key theft (V1 level) | Direct call to the vault with the stolen agent key | N/A | **Rejected on-chain**: `ERR_NO_CERT` | On-chain |
 
-**Measured result**: 7/7 traps stopped before signing, 7/7 times the expected rule fired.
+**Measured result**: 7/7 traps stopped before signing, 7/7 times the expected rule fired
+(full simulator — Linux/macOS; see the platform note in section 2).
 
 > **V1 note — post-check enabled.** The promise chain
 > `call → on_done → balance read → on_post_check` now fits in the gas budget of an agent
@@ -303,6 +314,10 @@ chain fits in the budget of an agent call: 300 TGas attached, 100 TGas for the t
 $ cargo test -p dryrun-sim --test v1_post_check
 test le_contrôle_au_retour_gele_et_marque_hostile ... ok
 ```
+
+> This test needs the real `near-sandbox`, so it runs on **Linux/macOS only** (it fails on
+> Windows: "Unsupported platform"). The CI runs the unit tests only
+> (`cargo test --workspace --lib --bins`); the integration tests are run locally on Linux/macOS.
 
 ### The differential simulation (R12)
 
@@ -543,16 +558,16 @@ without an `id`) gets no answer, as JSON-RPC 2.0 requires.
 - [x] **Unknown contracts**: any call to an account missing from `known` is refused on-chain with `ERR_UNKNOWN_CONTRACT` (`tests::known::i3_*`).
 - [x] **Watertight freeze**: the freeze key freezes in one transaction without a wallet; every later transaction is rejected with `ERR_FROZEN` (`tests::freeze::i2_*`).
 - [x] **Exact simulation**: the simulated balance changes are identical to the real ones (+1 NEAR to bob).
-- [x] **Trap corpus**: the 7 trap contracts (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`, `two-face`) are blocked before signing (`make attack`).
+- [x] **Trap corpus**: the 7 trap contracts (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`, `two-face`) are blocked before signing (`make attack`, full simulator — Linux/macOS).
 - [x] **Injection blocked**: "send 49 NEAR to mallory" is blocked by the firewall (R1) and rejected on-chain (`ERR_OVER_TX_CAP`).
 - [x] **Ed25519 certificate (V1)**: on-chain cryptographic verification of the simulation certificate before execution.
-- [x] **Post-check (V1)**: if the balance promised by the certificate is not reached on return, the vault freezes and marks the contract hostile (`tests/v1_post_check.rs`, real sandbox).
+- [x] **Post-check (V1)**: if the balance promised by the certificate is not reached on return, the vault freezes and marks the contract hostile (`tests/v1_post_check.rs`, real sandbox — Linux/macOS).
 - [x] **Differential simulation (V1)**: R12 on the **default path** — every contract call with a deposit is replayed at one hundredth, in parallel (`two-face` blocked, 947 ‰ gap).
 - [x] **Performance matrix**: `make sim` at 100 % precision on 200 synthetic robots.
 - [x] **MCP server**: native integration for Claude / Cursor / ZeroClaw agents over JSON-RPC.
 - [x] **Firewall on testnet**: verdict against the vault's real state (caps read over RPC), `ALLOW` signed and sent on-chain, transaction hash in the answer (section 6 ter).
 - [x] **Simulator down**: every request is refused as a precaution ("any doubt blocks").
-- [x] **Autonomy**: `make demo` and `make attack` run entirely locally, without secrets or network, in under 2 minutes.
+- [x] **Autonomy**: `make demo` and `make attack` run entirely locally, without secrets or network, in under 2 minutes (full simulator: Linux/macOS — see the platform note in section 2).
 
 ---
 
@@ -562,16 +577,16 @@ Honesty beats a promise: here is what works, and what does not work yet.
 
 | Topic | Status | Detail |
 |---|---|---|
-| Simulation (R1 to R11) | ✅ | The transaction is replayed in a sandbox, under the vault's identity. |
+| Simulation (R1 to R12) | ✅ | The transaction is replayed in a sandbox, under the vault's identity. |
 | V1 on-chain certificate | ✅ | Ed25519 signature verified by the contract, anti-replay nonces, freshness. |
-| Corpus of 7 traps | ✅ | 7/7 blocked, 7/7 with the expected rule (`make attack`). |
+| Corpus of 7 traps | ✅ | 7/7 blocked, 7/7 with the expected rule (`make attack`, full simulator — Linux/macOS). |
 | 200-robot bench | ✅ | `make sim`: 100 % precision on the synthetic corpus. |
 | MCP server | ✅ | JSON-RPC 2.0, 4 tools. |
 | **Post-check** (`on_post_check`) | ✅ | Enabled: `call → on_done → balance read → on_post_check` within an agent's gas budget. A gap found → freeze + hostile marking (`tests/v1_post_check.rs`). |
 | **Differential simulation** (R12) | ✅ | On the **default path**: every contract call with a deposit is replayed at one hundredth (`Gatekeeper::propose`). Both replays run in parallel, latency does not double. |
 | Scope of R12 | ⚠️ | R12 is **directional**: it only fires when the small amount is proportionally better treated than the real amount (the two-face signature). A contract with a **fixed minimum deposit** (like `good-dex` here, 2 NEAR) cannot be replayed at one hundredth: R12 then gives no signal and the other rules decide. A legitimate fixed-price contract can be flagged — assumed, the threshold is 100 ‰ (the SPEC says 5 %, but an honest bonding curve already drifts by several percent between 2 NEAR and 0.02 NEAR). |
 | **"Bare wallet" control** | ⚠️ | The control runs **after** the corpus, on the protected vault: it shows `ERR_NO_CERT` (the V1 defence), not the raw loss of funds. The raw loss is documented in the table of section 5 and shown by the simulation. |
-| Light simulator (`--sim stub`) | ⚠️ | Used by default when `near-sandbox` is not available (e.g. on Windows): it returns no token delta, so token swaps end `BLOCK R8`, and `two-face` is stopped by R8 rather than R12. `make demo` / `make attack` with the full simulator give the results above. |
+| Light simulator (`--sim stub`) | ⚠️ | Used by default when `near-sandbox` is not available (e.g. on Windows): it returns no token delta, so token swaps end `BLOCK R8`, and `two-face` is stopped by R8 rather than R12. It also does not implement the V1 certificate, so `make demo` stops at step [5] and `make attack` reports 4/7 (exit code 1). `make demo` / `make attack` with the full simulator give the results above. |
 | Vault on public testnet | ✅ | Deployed on `dryrun-vault-1112.testnet`: cap verified on-chain (5 NEAR refused, 0.1 NEAR executed). See section 6 bis. |
 | Firewall wired to testnet | ✅ | `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet`: `status()` read over RPC, `ALLOW` requests signed and sent on-chain (tx [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa)), `BLOCK` sends nothing (sections 6 ter and 6 quater). |
 | TEE enclave (MAX) | ❌ | Not started. The simulator key lives in the gatekeeper process. |

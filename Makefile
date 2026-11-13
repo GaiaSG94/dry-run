@@ -10,7 +10,7 @@ help:
 	@echo "  make build          Compile les contrats WASM et les outils"
 	@echo "  make test           Exécute tous les tests unitaires et invariants"
 	@echo "  make demo           Déroule la démo complète de bout en bout"
-	@echo "  make attack         Joue le corpus des 6 contrats piégés avec et sans pare-feu"
+	@echo "  make attack         Joue le corpus des 7 contrats piégés avec et sans pare-feu"
 	@echo "  make clean          Nettoie les artefacts de compilation"
 
 build: build-contracts build-tools

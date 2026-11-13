@@ -9,7 +9,7 @@
 #   DRYRUN_DEMO_HOST machine vers laquelle ouvrir la page via ssh/pc-page
 #                    (défaut : vide = étape d'ouverture sautée)
 # Exemple :
-#   DRYRUN_GATE_URL=http://10.0.0.12:8787 DRYRUN_DEMO_HOST=ms7d18 scripts/record-demo.sh
+#   DRYRUN_GATE_URL=http://127.0.0.1:8787 DRYRUN_DEMO_HOST=my-desktop scripts/record-demo.sh
 
 set -euo pipefail
 
