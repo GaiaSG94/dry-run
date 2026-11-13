@@ -18,7 +18,7 @@ on:
   pull_request:
   push:
     branches:
-      - feat/honest-stub-ci-proof
+      - main
 
 concurrency:
   group: sandbox-${{ github.ref }}
