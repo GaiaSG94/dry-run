@@ -91,7 +91,7 @@ scène commune comme en V5.
 4. vol de clé d'agent → refus on-chain `ERR_OVER_TX_CAP` ;
 5. gel d'un geste → FROZEN ;
 6. banc de 200 robots, graine 42 (`bench_matrix.json`) : TP 100, TN 100, FP 0,
-   FN 0, F1 1,00, jugement 0 µs en médiane et 2 µs au p95, 6 pièges.
+    FN 0, F1 1,00, jugement 0 µs en médiane et 2 µs au p95, 7 pièges.
 
 **Code couleur** : 2 couleurs par planche (fond + accent, le reste en blanc à
 opacité variable). ALLOW, WARN et BLOCK se distinguent par la forme (plein,

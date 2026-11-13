@@ -224,8 +224,8 @@ signature (`ERR_BAD_SIGNATURE`).
 
 ### 3.8 Les preuves
 
-- **6 pièges** : `drainer` (R8), `skimmer` (R7+R8), `half-step` (R9),
-  `liar` (R8), `approver` (R3), `shapeshifter` (R6) + **vol de clé d'agent**
+- **7 pièges** : `drainer` (R8), `skimmer` (R7+R8), `half-step` (R9),
+  `liar` (R8), `approver` (R3), `shapeshifter` (R6), `two-face` (R12) + **vol de clé d'agent**
   rejeté on-chain (`ERR_OVER_TX_CAP`, puis `ERR_OVER_DAILY_CAP` à la 6ᵉ tentative).
 - **Banc 200 robots** (`make sim`, graine 42) : 45 transferts honnêtes,
   40 swaps honnêtes, 15 paiements honnêtes / 10 injections, 12 dépassements 24 h,

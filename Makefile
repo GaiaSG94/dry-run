@@ -7,10 +7,17 @@ RUSTFLAGS ?= -C opt-level=3
 
 help:
 	@echo "Dry Run — Cibles disponibles :"
-	@echo "  make build          Compile les contrats WASM et les outils"
+	@echo "  make build           Compile les contrats WASM et les outils"
+	@echo "  make build-contracts Compile seulement les contrats WASM"
+	@echo "  make build-tools    Compile seulement les outils (core, sim, gate)"
 	@echo "  make test           Exécute tous les tests unitaires et invariants"
+	@echo "  make lint           rustfmt --check + clippy -D warnings"
+	@echo "  make fmt            Applique rustfmt"
 	@echo "  make demo           Déroule la démo complète de bout en bout"
 	@echo "  make attack         Joue le corpus des 7 contrats piégés avec et sans pare-feu"
+	@echo "  make sim            Banc de test automatisé (200 robots, graine 42)"
+	@echo "  make mcp            Démarre le serveur MCP (JSON-RPC 2.0 sur stdin/stdout)"
+	@echo "  make demo-testnet   Vérification / déploiement sur NEAR testnet"
 	@echo "  make clean          Nettoie les artefacts de compilation"
 
 build: build-contracts build-tools
