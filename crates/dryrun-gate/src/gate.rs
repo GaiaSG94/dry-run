@@ -31,6 +31,13 @@ pub struct Outcome {
     pub note: String,
     /// Certificat de simulation signé qui accompagne la transaction (V1).
     pub cert: Option<CertView>,
+    /// Vrai si la transaction est partie sur une **vraie chaîne** (testnet).
+    ///
+    /// En mode local, l'exécution se joue dans un bac à sable ou en mémoire :
+    /// le dire honnêtement vaut mieux qu'un « oui » trompeur.
+    pub on_chain: bool,
+    /// Empreinte de la transaction, quand elle est partie sur une vraie chaîne.
+    pub tx_hash: Option<String>,
 }
 
 /// Vue compacte du certificat de simulation, telle que l'affiche la page web.
@@ -74,7 +81,7 @@ impl From<&dryrun_core::types::SignedCert> for CertView {
 ///
 /// Les minimaux déclarés dans l'intention deviennent des engagements vérifiés
 /// on-chain : un écart gèle le coffre et marque le contrat hostile.
-fn post_conditions(intent: &Intent) -> Vec<(String, u128)> {
+pub(crate) fn post_conditions(intent: &Intent) -> Vec<(String, u128)> {
     intent
         .min_in
         .iter()
@@ -151,15 +158,19 @@ impl Gatekeeper {
         let card = format_terminal(&decision, intent);
         let card_view = format_json(&decision, intent);
 
-        let (executed, note, cert_view) = match decision.verdict {
+        let (executed, note, cert_view, on_chain, tx_hash) = match decision.verdict {
             Verdict::Block => (
                 false,
                 "Refusé : le pare-feu a bloqué la demande avant toute signature.".to_string(),
+                None,
+                false,
                 None,
             ),
             Verdict::Warn => (
                 false,
                 "Avertissement : le propriétaire doit confirmer avant signature.".to_string(),
+                None,
+                false,
                 None,
             ),
             Verdict::Allow => self.execute_allowed(demand, intent, &decision).await,
@@ -181,6 +192,8 @@ impl Gatekeeper {
             executed,
             note,
             cert: cert_view,
+            on_chain,
+            tx_hash,
         })
     }
 
@@ -188,33 +201,49 @@ impl Gatekeeper {
     ///
     /// Un **certificat de simulation** signé par la clé du simulateur accompagne
     /// la transaction (niveau V1) : le coffre vérifie sa fraîcheur, son nonce et
-    /// sa signature avant d'exécuter quoi que ce soit.
+    /// sa signature avant d'exécuter quoi que ce soit. Sur le testnet, le
+    /// coffre n'a aucune `sim_key` enregistrée : l'action part avec
+    /// `cert: null`, signée par la clé du compte.
     async fn execute_allowed(
         &self,
         demand: &Demande,
         intent: &Intent,
         decision: &dryrun_core::types::Decision,
-    ) -> (bool, String, Option<CertView>) {
-        let post = post_conditions(intent);
-        let cert = match self.sim.sign_cert(demand, &decision.effects, post).await {
-            Ok(cert) => cert,
+    ) -> (bool, String, Option<CertView>, bool, Option<String>) {
+        let report = match self
+            .sim
+            .execute_approved(demand, intent, &decision.effects)
+            .await
+        {
+            Ok(report) => report,
             Err(err) => {
-                return (false, format!("Certificat non signé : {err}"), None);
+                return (
+                    false,
+                    format!("Échec de l'exécution : {err}"),
+                    None,
+                    false,
+                    None,
+                )
             }
         };
-        let cert_view = Some(CertView::from(&cert));
-        let signed = Some(&cert);
-
-        match self.sim.execute_with_cert(demand, signed).await {
-            Ok(outcome) => {
-                let note = format!(
-                    "Signé par la clé de l'agent puis exécuté (tx {}).",
-                    outcome.tx_hash
-                );
-                (outcome.success, note, cert_view)
+        let cert_view = report.cert.as_ref().map(CertView::from);
+        let note = match (report.on_chain, report.tx_hash.as_deref()) {
+            (true, Some(hash)) => {
+                format!("Signé par la clé du compte puis exécuté sur NEAR testnet (tx {hash}).")
             }
-            Err(err) => (false, format!("Échec de l'exécution : {err}"), cert_view),
-        }
+            (true, None) => "Signé par la clé du compte puis exécuté sur NEAR testnet.".to_string(),
+            (false, _) => format!(
+                "Signé par la clé de l'agent puis exécuté (tx {}).",
+                report.outcome.tx_hash
+            ),
+        };
+        (
+            report.outcome.success,
+            note,
+            cert_view,
+            report.on_chain,
+            report.tx_hash,
+        )
     }
 
     /// Exécute une demande que le propriétaire a explicitement confirmée
@@ -222,7 +251,8 @@ impl Gatekeeper {
     pub async fn confirm(&self, demand: &Demande) -> anyhow::Result<(bool, String)> {
         let intent = Intent::default();
         let decision = self.sim.simulate(demand, &intent).await?;
-        let (success, note, _cert) = self.execute_allowed(demand, &intent, &decision).await;
+        let (success, note, _cert, _on_chain, _tx_hash) =
+            self.execute_allowed(demand, &intent, &decision).await;
         Ok((success, note))
     }
 
@@ -260,16 +290,20 @@ impl Gatekeeper {
         let (decision, report) = self.sim.simulate_differential(demand, intent).await?;
         let card = format_terminal(&decision, intent);
         let card_view = format_json(&decision, intent);
-        let (executed, note, cert) = match decision.verdict {
+        let (executed, note, cert, on_chain, tx_hash) = match decision.verdict {
             Verdict::Allow => self.execute_allowed(demand, intent, &decision).await,
             Verdict::Warn => (
                 false,
                 "Avertissement : le propriétaire doit confirmer avant signature.".to_string(),
                 None,
+                false,
+                None,
             ),
             Verdict::Block => (
                 false,
                 "Refusé : le pare-feu a bloqué la demande avant toute signature.".to_string(),
+                None,
+                false,
                 None,
             ),
         };
@@ -289,6 +323,8 @@ impl Gatekeeper {
                 executed,
                 note,
                 cert,
+                on_chain,
+                tx_hash,
             },
             report,
         ))

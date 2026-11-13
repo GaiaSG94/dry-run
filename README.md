@@ -352,20 +352,70 @@ Pour relire l'état :
 near contract call-function as-read-only dryrun-vault-1112.testnet status json-args '{}' network-config testnet now
 ```
 
-**Ce que ça prouve :** le dernier rempart du coffre (plafonds par transaction et
-sur 24 h, journal, événements NEP-297) s'applique sur une vraie chaîne, hors de
-toute simulation locale.
+### 6 ter. Le pare-feu branché sur le coffre testnet
 
-**Ce que ça ne prouve pas encore :**
-- `dryrun-gate` (API HTTP, CLI, MCP, page web) n'a pas encore de mode testnet. Il
-  juge toujours les demandes sur un coffre en mémoire (`vault.test.near`). Le relier
-  au coffre testnet (lecture de `status()` par RPC, envoi des demandes ALLOW à
-  `execute`) est le prochain chantier.
-- Aucune `sim_key` n'est enregistrée : le certificat V1 n'est pas exigé sur ce
-  déploiement.
+`dryrun-gate` a un **mode testnet** : il ne juge plus sur un coffre en mémoire,
+mais sur le coffre `vault` réellement déployé ci-dessus.
+
+```bash
+# Le serveur MCP, branché sur la chaîne (l'agent signe pour de vrai)
+dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet --lang en
+
+# La page web et son API, branchés sur la chaîne
+dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
+```
+
+Ce que le mode change, et rien d'autre :
+
+| | Mode local (défaut) | Mode `--network testnet` |
+|---|---|---|
+| État du coffre | en mémoire ou bac à sable local | `status()` lu **par RPC** sur `https://rpc.testnet.near.org` |
+| Verdict | mêmes règles R1 à R12 | mêmes règles R1 à R12, **jugées contre les plafonds réels** de la chaîne |
+| Verdict `ALLOW` | signé et exécuté en local | `execute(action, cert: null)` envoyé **sur la chaîne**, signé par la clé du compte |
+| Verdict `BLOCK` / `WARN` | rien n'est signé | rien n'est envoyé |
+| Réponse | « exécuté sur le coffre local (simulation) » | « sur NEAR testnet · tx `<empreinte>` » |
+
+Les plafonds lus sur la chaîne sont ceux du coffre déployé : 2 NEAR par
+transaction, 10 NEAR sur 24 h. Une demande de 49 NEAR est donc bloquée par
+**R1** avant toute signature, exactement comme en local.
+
+**La clé n'est jamais lue par Dry Run.** Elle reste dans le trousseau du
+système ; Dry Run appelle la CLI NEAR (`near-cli-rs`) qui la récupère elle-même
+(`sign-with-keychain`). Le binaire est cherché dans le `PATH`, ou pointé par la
+variable d'environnement `NEAR_CLI_BIN`.
+
+### 6 quater. Vérifié en vrai, sur la chaîne
+
+Session JSON-RPC réelle contre le coffre testnet, le 2026-11-13 :
+
+| Demande (client MCP) | Verdict | Ce qui s'est passé |
+|---|---|---|
+| 49 NEAR vers `mallory.test.near` | **BLOCK** (R1) | rien n'a été signé, aucune transaction |
+| 0,1 NEAR vers `testnet` | **ALLOW** | transaction signée et exécutée : [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa) |
+
+Après la transaction, `status()` sur la chaîne confirme la dépense :
+`spent_24h` est passé de 0,1 à 0,2 NEAR. La transaction elle-même porte
+l'appel `execute` avec `cert: null` — le certificat V1 n'est pas exigé, ce
+déploiement n'ayant aucune `sim_key` enregistrée.
+
+**Ce que ça prouve :** le pare-feu protège un portefeuille **réellement
+déployé**. Le verdict sort d'un état lu sur la chaîne, la signature est celle
+de la clé du compte, et la sortie porte une empreinte de transaction
+cliquable.
+
+**Ce que ça ne prouve pas :**
+- Les effets d'un **appel de contrat** ne sont pas rejoués hors chaîne : un
+  appel vers un contrat inconnu est traité comme un premier contact (R5,
+  `WARN`) et n'est donc pas envoyé sans confirmation du propriétaire. Un
+  transfert, lui, est déterministe : il est jugé exactement.
+- Le gel d'urgence est **refusé** sur le coffre testnet (`DRYRUN_ALLOW_TESTNET_FREEZE=1`
+  pour le forcer) : un gel réel dure au moins une heure et casserait la
+  démonstration pour le reste de la journée.
 - Pour la démonstration, le coffre est son propre `owner` et garde sa clé
   `FullAccess`. En production, on retire cette clé et on donne à l'agent une clé
   limitée à `execute` (section 6, point 1).
+- Aucune `sim_key` n'est enregistrée : le certificat V1 n'est pas exigé sur ce
+  déploiement.
 
 ---
 
@@ -477,10 +527,17 @@ agent (Claude Desktop, Cursor, ZeroClaw, Codex) peut demander une transaction et
 un verdict motivé, sans jamais posséder la clé de signature.
 
 ```bash
-make mcp
+make mcp                      # mode local, réponses en anglais (défaut)
+dryrun-gate mcp --lang fr      # réponses en français
+dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet
 ```
 
 Outils exposés : `wallet_status`, `wallet_propose`, `wallet_freeze`, `wallet_explain`.
+
+La réponse dit **où** la transaction a été exécutée — `the local vault
+(simulation)` en local, `NEAR testnet · tx <hash>` en mode testnet — et une
+**notification** (message sans `id`) ne reçoit aucune réponse, conformément à
+JSON-RPC 2.0.
 
 ---
 
@@ -497,6 +554,7 @@ Outils exposés : `wallet_status`, `wallet_propose`, `wallet_freeze`, `wallet_ex
 - [x] **Simulation différentielle (V1)** : R12 sur le **chemin par défaut** — tout appel de contrat avec dépôt est rejoué au centième, en parallèle (`two-face` bloqué, écart 947 ‰).
 - [x] **Matrice de performance** : `make sim` validé à 100 % de précision sur 200 robots synthétiques.
 - [x] **Serveur MCP** : intégration native pour agents Claude / Cursor / ZeroClaw via JSON-RPC.
+- [x] **Pare-feu sur testnet** : verdict contre l'état réel du coffre (plafonds lus par RPC), `ALLOW` signé et envoyé sur la chaîne, empreinte de transaction dans la réponse (section 6 ter).
 - [x] **Simulateur arrêté** : toute demande est refusée par précaution (« tout doute bloque »).
 - [x] **Autonomie** : `make demo` et `make attack` s'exécutent entièrement en local sans secret ni réseau en moins de 2 minutes.
 
@@ -518,7 +576,7 @@ L'honnêteté vaut mieux qu'une promesse : voici ce qui marche, et ce qui ne mar
 | Portée de R12 | ⚠️ | R12 est **orienté** : il ne mord que si le petit montant est proportionnellement mieux traité que le montant réel (signature du double visage). Un contrat à **dépôt minimum fixe** (comme `good-dex` ici, 2 NEAR) ne peut pas être rejoué au centième : R12 n'apporte alors aucun signal et les autres règles tranchent. Un contrat à prix fixe légitime peut être signalé — assumé, le seuil est à 100 ‰ (le SPEC annonce 5 %, mais une courbe de liaison honnête dérive déjà de plusieurs pour cent entre 2 NEAR et 0,02 NEAR). |
 | **Témoin « wallet nu »** | ⚠️ | Le témoin est joué **après** le corpus, sur le coffre protégé : il montre `ERR_NO_CERT` (la défense V1), pas la perte de fonds brute. La perte brute est documentée dans le tableau de la section 5 et montrée par la simulation. |
 | Coffre sur testnet public | ✅ | Déployé sur `dryrun-vault-1112.testnet` : plafond vérifié sur la chaîne (5 NEAR refusé, 0,1 NEAR exécuté). Voir la section 6 bis. |
-| Pare-feu branché sur testnet | ⚠️ | `dryrun-gate` juge encore sur un coffre en mémoire ; il n'appelle pas le coffre testnet. |
+| Pare-feu branché sur testnet | ✅ | `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet` : `status()` lu par RPC, demandes `ALLOW` signées et envoyées sur la chaîne (tx [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa)). Voir section 6 ter. |
 | Enclave TEE (MAX) | ❌ | Non commencé. La clé du simulateur vit dans le processus du garde-barrière. |
 
 ---

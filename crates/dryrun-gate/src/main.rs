@@ -8,10 +8,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use dryrun_core::types::{Demande, Intent, Verdict};
-use dryrun_gate::cli::{self, Command};
+use dryrun_gate::cli::{self, Command, Network};
 use dryrun_gate::demo;
 use dryrun_gate::gate::{Gatekeeper, Outcome};
 use dryrun_gate::http::HttpServer;
+use dryrun_gate::lang::Lang;
 use dryrun_gate::{Simulator, VaultStatus};
 
 /// Dossier des wasm compilés, relatif à la racine du dépôt.
@@ -68,20 +69,36 @@ fn extract_sim_choice(args: Vec<String>) -> (Vec<String>, SimChoice) {
     (kept, choice)
 }
 
-/// Construit le garde-barrière selon le simulateur demandé.
-async fn open_gate(choice: SimChoice) -> anyhow::Result<Gatekeeper> {
-    let gate = match choice {
-        SimChoice::Stub => Gatekeeper::from_sim(Arc::new(Simulator::stub().await?)),
-        SimChoice::Real | SimChoice::Auto => Gatekeeper::start(Path::new(DEFAULT_WASM_DIR)).await?,
+/// Construit le garde-barrière selon le simulateur et le réseau demandés.
+async fn open_gate(choice: SimChoice, network: &Network) -> anyhow::Result<Gatekeeper> {
+    let gate = match network {
+        Network::Local => match choice {
+            SimChoice::Stub => Gatekeeper::from_sim(Arc::new(Simulator::stub().await?)),
+            SimChoice::Real | SimChoice::Auto => {
+                Gatekeeper::start(Path::new(DEFAULT_WASM_DIR)).await?
+            }
+        },
+        Network::Chain {
+            vault,
+            name,
+            rpc_url,
+        } => {
+            let sim = Simulator::testnet(vault, name, rpc_url).await?;
+            Gatekeeper::from_sim(Arc::new(sim))
+        }
     };
     // Niveau V1 : le propriétaire dépose la clé publique du simulateur sur le
     // coffre. À partir de là, le coffre n'exécute **que** des demandes
     // accompagnées d'un certificat signé et frais : voler la clé de l'agent ne
     // suffit plus. En démonstration locale, la clé du propriétaire vit dans ce
     // processus ; en production, c'est un geste du propriétaire (voir README).
-    match gate.install_sim_key().await {
-        Ok(key) => println!("clé du simulateur enregistrée sur le coffre : {key}"),
-        Err(err) => eprintln!("certificats inactifs ({err:#})"),
+    // Sur le testnet, aucune `sim_key` n'est enregistrée : le certificat n'y
+    // est pas exigé, et la clé du compte signe directement l'action.
+    if let Network::Local = network {
+        match gate.install_sim_key().await {
+            Ok(key) => println!("clé du simulateur enregistrée sur le coffre : {key}"),
+            Err(err) => eprintln!("certificats inactifs ({err:#})"),
+        }
     }
     Ok(gate)
 }
@@ -93,7 +110,11 @@ async fn run(command: Command, sim_choice: SimChoice) -> anyhow::Result<()> {
     if let Command::Sim { seed } = command {
         return run_bench(seed);
     }
-    let gate = open_gate(sim_choice).await?;
+    let network = match &command {
+        Command::Serve { network, .. } | Command::Mcp { network, .. } => network.clone(),
+        _ => Network::local(),
+    };
+    let gate = open_gate(sim_choice, &network).await?;
     match command {
         Command::Propose { demand, intent } => propose(&gate, demand, intent).await,
         Command::Approve { contract } => approve(&gate, &contract).await,
@@ -106,11 +127,25 @@ async fn run(command: Command, sim_choice: SimChoice) -> anyhow::Result<()> {
         Command::Log => show_log(&gate),
         Command::Demo => demo::run_demo(&gate).await,
         Command::Attack => dryrun_gate::attack::run_attack(&gate).await,
-        Command::Serve { port, web_dir } => serve(gate, port, web_dir).await,
+        Command::Serve {
+            port,
+            web_dir,
+            network,
+        } => serve(gate, port, web_dir, &network).await,
         Command::Sim { seed } => run_bench(seed),
-        Command::Mcp => {
-            eprintln!("serveur MCP Dry Run (JSON-RPC 2.0 sur stdin/stdout)");
-            dryrun_gate::mcp::run_mcp_server(Arc::new(gate)).await
+        Command::Mcp { network, lang } => {
+            let where_ = match &network {
+                Network::Local => "coffre local".to_string(),
+                Network::Chain { vault, .. } => format!("coffre testnet {vault}"),
+            };
+            eprintln!(
+                "serveur MCP Dry Run (JSON-RPC 2.0 sur stdin/stdout, langue : {}, {where_})",
+                match lang {
+                    Lang::En => "en",
+                    Lang::Fr => "fr",
+                }
+            );
+            dryrun_gate::mcp::run_mcp_server(Arc::new(gate), lang).await
         }
         Command::Help => Ok(()),
     }
@@ -258,9 +293,19 @@ fn show_log(gate: &Gatekeeper) -> anyhow::Result<()> {
 }
 
 /// Démarre le serveur HTTP de la page web.
-async fn serve(gate: Gatekeeper, port: u16, web_dir: String) -> anyhow::Result<()> {
+async fn serve(
+    gate: Gatekeeper,
+    port: u16,
+    web_dir: String,
+    network: &Network,
+) -> anyhow::Result<()> {
     let web_dir = resolve_web_dir(&web_dir);
-    println!("interface web accessible sur http://0.0.0.0:{port}/");
+    match network {
+        Network::Local => println!("interface web accessible sur http://0.0.0.0:{port}/"),
+        Network::Chain { vault, .. } => println!(
+            "interface web accessible sur http://0.0.0.0:{port}/ — coffre testnet {vault} (RPC publique)"
+        ),
+    }
     let server = Arc::new(HttpServer::new(Arc::new(gate), web_dir));
     server.run(&format!("0.0.0.0:{port}")).await
 }
@@ -296,10 +341,15 @@ fn print_help() {
     println!("  dryrun-gate freeze");
     println!("  dryrun-gate status");
     println!("  dryrun-gate log");
-    println!("  dryrun-gate serve [--port 8787] [--web-dir web]");
+    println!("  dryrun-gate serve [--port 8787] [--web-dir web] [--network local|testnet] [--vault <compte>]");
     println!("  dryrun-gate sim [graine]     # banc de 200 robots + matrice de confusion");
-    println!("  dryrun-gate mcp              # serveur MCP (Claude Desktop, Cursor, ZeroClaw)");
+    println!("  dryrun-gate mcp [--network local|testnet] [--vault <compte>] [--lang en|fr]");
     println!();
     println!("Option globale : --sim auto|real|stub (défaut : auto).");
     println!("`stub` joue la démonstration sur un coffre en mémoire, sans bac à sable.");
+    println!();
+    println!("Mode testnet : --network testnet --vault <compte.testnet> branche le");
+    println!("garde-barrière sur un coffre `vault` réellement déployé : `status()` est");
+    println!("lu par RPC, les demandes ALLOW sont signées et envoyées sur la chaîne.");
+    println!("La clé du compte reste dans le trousseau : la CLI NEAR la lit, jamais Dry Run.");
 }

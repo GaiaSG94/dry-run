@@ -92,3 +92,36 @@ Session JSON-RPC réelle sur `dryrun-gate --sim stub mcp` : `initialize` OK (dry
    (option `--lang en` ou anglais par défaut) pour la vidéo et le jury.
 3. **Protocole** : `notifications/initialized` reçoit une réponse (`id: null`). Une notification ne doit pas
    avoir de réponse ; certains clients MCP stricts le signalent.
+
+## [opencode] 2026-11-13 — demande traitée : pare-feu sur testnet + 3 corrections MCP
+
+**Pas bloqué.** Les 6 points de la demande et les 3 points MCP sont faits. Détail complet dans
+`G-DESIGN/STATUS.md` (section opencode). En bref :
+
+- `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet` (même option pour `serve`).
+  Le mode local est inchangé par défaut. `status()` est lu par RPC, les verdicts sortent des mêmes
+  règles R1 à R12 mais **jugés contre les plafonds réels de la chaîne**, un `ALLOW` part sur la
+  chaîne (`execute`, `cert: null`) et la réponse porte l'empreinte de transaction.
+- La clé n'a jamais été lue : c'est la CLI NEAR (`near-cli-rs`, `sign-with-keychain`) qui la prend
+  dans le trousseau Windows. `near-cli-rs` a été réinstallée globalement (`npm install -g near-cli-rs`).
+- MCP : la ligne « Exécuté sur chaîne : OUI » est remplacée par « le coffre local (simulation) » ou
+  « NEAR testnet · tx <hash> » ; les réponses sont **en anglais par défaut** (`--lang fr` pour le
+  français) ; une notification ne reçoit plus de réponse.
+- Vérifié en vrai : 49 NEAR → BLOCK (R1, aucune transaction), 0,1 NEAR → ALLOW + tx
+  [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa)
+  (`spent_24h` 0,1 → 0,2 NEAR, relu sur la chaîne). README : sections « 6 ter » et « 6 quater ».
+
+**Pour la vidéo B (à faire avant le tournage) :**
+
+1. Filmer `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet --lang en` — c'est la
+   commande qui produit la fin « le paiement passe, signé sur NEAR, hash cliquable ».
+2. Le destinataire doit être un compte **qui existe sur le testnet** : `testnet` existe ;
+   `mallory.test.near`, `bob.test.near` et `supplier.test.near` **n'existent pas** (un paiement vers
+   eux échouerait sur la chaîne, même si le pare-feu bloque déjà 49 NEAR avant).
+3. Le coffre est à **9,79 NEAR**, `spent_24h` = 0,2 NEAR sur 10 NEAR/24 h : chaque paiement réel de
+   0,1 NEAR consomme le plafond de la journée. Ne pas en enchaîner beaucoup.
+4. Le **gel d'urgence est refusé** sur le coffre testnet (un gel réel dure ≥ 1 h et casserait la
+   démo). Pour montrer le gel, utiliser le mode local.
+5. La limite à assumer si on en parle : hors chaîne, les effets d'un **appel de contrat** ne sont pas
+   rejoués (R5 → rien n'est envoyé sans confirmation). Un **transfert** est déterministe et juge
+   exactement — c'est le chemin filmé.

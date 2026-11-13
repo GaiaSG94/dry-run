@@ -23,6 +23,10 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+# Le mode testnet lit `status()` par RPC : `rustls-tls` évite la dépendance
+# système OpenSSL, ce qui garde `cargo build` exécutable partout.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+base64 = { workspace = true }
 
 [dev-dependencies]
 # Le client HTTP des tests : `rustls-tls` évite la dépendance système OpenSSL,

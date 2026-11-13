@@ -1,7 +1,8 @@
 //! Tests de l'analyse des arguments de la ligne de commande.
 
 use dryrun_core::types::Demande;
-use dryrun_gate::cli::{parse, parse_near, Command};
+use dryrun_gate::cli::{parse, parse_near, Command, Network};
+use dryrun_gate::lang::Lang;
 
 /// Construit un vecteur d'arguments à partir de mots.
 fn argv(words: &[&str]) -> Vec<String> {
@@ -102,9 +103,79 @@ fn propose_appel_construit_la_demande() {
 fn serve_lit_le_port() {
     let args = argv(&["serve", "--port", "9090", "--web-dir", "web"]);
     match parse(&args).expect("commande valide") {
-        Command::Serve { port, web_dir } => {
+        Command::Serve {
+            port,
+            web_dir,
+            network,
+        } => {
             assert_eq!(port, 9090);
             assert_eq!(web_dir, "web");
+            assert_eq!(network, Network::local());
+        }
+        other => panic!("commande inattendue : {other:?}"),
+    }
+}
+
+#[test]
+fn serve_testnet_exige_un_coffre() {
+    let args = argv(&["serve", "--network", "testnet"]);
+    let err = parse(&args).expect_err("testnet sans coffre doit échouer");
+    assert!(err.to_string().contains("--vault"), "erreur : {err}");
+}
+
+#[test]
+fn serve_testnet_avec_coffre_est_reconnu() {
+    let args = argv(&[
+        "serve",
+        "--network",
+        "testnet",
+        "--vault",
+        "dryrun-vault-1112.testnet",
+    ]);
+    match parse(&args).expect("commande valide") {
+        Command::Serve { network, .. } => match network {
+            Network::Chain { vault, name, .. } => {
+                assert_eq!(vault, "dryrun-vault-1112.testnet");
+                assert_eq!(name, "testnet");
+            }
+            other => panic!("réseau inattendu : {other:?}"),
+        },
+        other => panic!("commande inattendue : {other:?}"),
+    }
+}
+
+#[test]
+fn mcp_accepte_la_langue_et_le_reseau() {
+    let args = argv(&[
+        "mcp",
+        "--network",
+        "testnet",
+        "--vault",
+        "dryrun-vault-1112.testnet",
+        "--lang",
+        "fr",
+    ]);
+    match parse(&args).expect("commande valide") {
+        Command::Mcp { network, lang } => {
+            assert_eq!(lang, Lang::Fr);
+            assert!(matches!(network, Network::Chain { .. }));
+        }
+        other => panic!("commande inattendue : {other:?}"),
+    }
+}
+
+#[test]
+fn mcp_rejette_une_langue_inconnue() {
+    let args = argv(&["mcp", "--lang", "italien"]);
+    assert!(parse(&args).is_err());
+}
+
+#[test]
+fn mcp_par_defaut_est_en_anglais_et_en_local() {
+    match parse(&argv(&["mcp"])).expect("commande valide") {
+        Command::Mcp { network, lang } => {
+            assert_eq!(lang, Lang::En);
+            assert_eq!(network, Network::local());
         }
         other => panic!("commande inattendue : {other:?}"),
     }

@@ -2,6 +2,40 @@
 
 use dryrun_core::types::{Demande, Intent, Yocto};
 
+use crate::lang::Lang;
+
+/// Réseau sur lequel le garde-barrière travaille.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Network {
+    /// Coffre en mémoire ou bac à sable local (défaut, comportement inchangé).
+    Local,
+    /// Coffre réellement déployé sur une chaîne NEAR publique.
+    Chain {
+        /// Compte du coffre (il porte aussi le contrat `vault`).
+        vault: String,
+        /// Nom du réseau pour la CLI NEAR (`testnet`).
+        name: String,
+        /// URL RPC du réseau.
+        rpc_url: String,
+    },
+}
+
+impl Network {
+    /// Réseau local (par défaut).
+    pub fn local() -> Self {
+        Network::Local
+    }
+
+    /// Réseau testnet public.
+    pub fn testnet(vault: String) -> Self {
+        Network::Chain {
+            vault,
+            name: "testnet".to_string(),
+            rpc_url: crate::testnet::rpc::TESTNET_RPC_URL.to_string(),
+        }
+    }
+}
+
 /// Commande demandée à la CLI.
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,11 +55,15 @@ pub enum Command {
     /// Joue le corpus d'attaques et vérifie que tout est refusé.
     Attack,
     /// Sert la page web et l'API JSON.
-    Serve { port: u16, web_dir: String },
+    Serve {
+        port: u16,
+        web_dir: String,
+        network: Network,
+    },
     /// Lance le banc de test automatisé de 200 robots (matrice de confusion).
     Sim { seed: u64 },
     /// Démarre le serveur MCP JSON-RPC sur stdin/stdout pour les agents IA.
-    Mcp,
+    Mcp { network: Network, lang: Lang },
     /// Affiche l'aide.
     Help,
 }
@@ -189,8 +227,12 @@ pub fn parse(args: &[String]) -> anyhow::Result<Command> {
         Some("demo") => Command::Demo,
         Some("attack") => Command::Attack,
         Some("serve") => {
-            let (port, web_dir) = parse_serve(&args[1..])?;
-            Command::Serve { port, web_dir }
+            let (port, web_dir, network) = parse_serve(&args[1..])?;
+            Command::Serve {
+                port,
+                web_dir,
+                network,
+            }
         }
         Some("sim") => {
             let seed = args
@@ -199,17 +241,21 @@ pub fn parse(args: &[String]) -> anyhow::Result<Command> {
                 .unwrap_or(42);
             Command::Sim { seed }
         }
-        Some("mcp") => Command::Mcp,
+        Some("mcp") => {
+            let (network, lang) = parse_mcp(&args[1..])?;
+            Command::Mcp { network, lang }
+        }
         Some("help") | Some("--help") | Some("-h") | None => Command::Help,
         Some(other) => anyhow::bail!("commande inconnue : {other} (essayer `help`)"),
     };
     Ok(command)
 }
 
-/// Analyse les options de `serve` : `--port` et `--web-dir`.
-fn parse_serve(args: &[String]) -> anyhow::Result<(u16, String)> {
+/// Analyse les options de `serve` : `--port`, `--web-dir`, `--network`, `--vault`.
+fn parse_serve(args: &[String]) -> anyhow::Result<(u16, String, Network)> {
     let mut port = 8787u16;
     let mut web_dir = "web".to_string();
+    let mut choice = NetworkChoice::default();
     let mut index = 0;
     while index + 1 < args.len() {
         match args[index].as_str() {
@@ -219,9 +265,57 @@ fn parse_serve(args: &[String]) -> anyhow::Result<(u16, String)> {
                     .map_err(|_| anyhow::anyhow!("port invalide : {}", args[index + 1]))?
             }
             "--web-dir" => web_dir = args[index + 1].clone(),
+            "--vault" => choice.vault = Some(args[index + 1].clone()),
+            "--network" => choice.network = Some(args[index + 1].clone()),
             other => anyhow::bail!("option inconnue pour serve : {other}"),
         }
         index += 2;
     }
-    Ok((port, web_dir))
+    Ok((port, web_dir, choice.resolve()?))
+}
+
+/// Analyse les options de `mcp` : `--network`, `--vault`, `--lang`.
+fn parse_mcp(args: &[String]) -> anyhow::Result<(Network, Lang)> {
+    let mut choice = NetworkChoice::default();
+    let mut lang = Lang::default();
+    let mut index = 0;
+    while index + 1 < args.len() {
+        match args[index].as_str() {
+            "--vault" => choice.vault = Some(args[index + 1].clone()),
+            "--lang" => lang = Lang::parse(&args[index + 1])?,
+            "--network" => choice.network = Some(args[index + 1].clone()),
+            other => anyhow::bail!("option inconnue pour mcp : {other}"),
+        }
+        index += 2;
+    }
+    Ok((choice.resolve()?, lang))
+}
+
+/// Choix de réseau fait par l'utilisateur, avant résolution.
+#[derive(Clone, Debug, Default)]
+struct NetworkChoice {
+    /// Réseau demandé (`local` ou `testnet`).
+    network: Option<String>,
+    /// Compte du coffre demandé.
+    vault: Option<String>,
+}
+
+impl NetworkChoice {
+    /// Résout le choix en réseau utilisable.
+    ///
+    /// `--network testnet` exige `--vault` : sans compte de coffre, on ne peut
+    /// ni lire `status()` ni signer quoi que ce soit.
+    fn resolve(&self) -> anyhow::Result<Network> {
+        let name = self.network.as_deref().unwrap_or("local");
+        match name {
+            "local" => Ok(Network::local()),
+            "testnet" => match self.vault.as_deref() {
+                Some(account) => Ok(Network::testnet(account.to_string())),
+                None => anyhow::bail!(
+                    "--network testnet exige --vault <compte.testnet> (le compte qui porte le coffre)"
+                ),
+            },
+            other => anyhow::bail!("réseau inconnu : {other} (attendus : local, testnet)"),
+        }
+    }
 }

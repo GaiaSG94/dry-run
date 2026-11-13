@@ -1,14 +1,17 @@
-//! Sélection du simulateur : vrai `dryrun-sim` ou bouchon en mémoire.
+//! Sélection du simulateur : vrai `dryrun-sim`, bouchon en mémoire, ou
+//! coffre déployé sur le testnet public NEAR.
 //!
 //! - feature `real-sim` (**défaut**) : vraie simulation NEAR via `dryrun-sim`
 //!   (section 4 du SPEC), adaptée par `crate::sim_real` ;
 //! - feature `stub` : simulateur en mémoire `crate::sim_stub`, pour compiler et
 //!   tester le crate seul, sans `near-sandbox` (`--no-default-features
-//!   --features stub`).
+//!   --features stub`) ;
+//! - `crate::testnet` : le coffre `vault` réellement déployé sur le testnet,
+//!   branché en lecture par RPC et en écriture par la CLI NEAR.
 //!
-//! Les deux implémentations sont toujours compilées : le garde-barrière choisit
-//! à l'exécution, ce qui permet aux tests HTTP de tourner sur le bouchon même
-//! quand la version par défaut est le vrai simulateur.
+//! Les trois implémentations sont toujours compilées : le garde-barrière
+//! choisit à l'exécution, ce qui permet aux tests HTTP de tourner sur le
+//! bouchon même quand la version par défaut est le vrai simulateur.
 
 /// Déploie l'appel sur la variante active du simulateur.
 macro_rules! dispatch {
@@ -17,6 +20,7 @@ macro_rules! dispatch {
             Simulator::Stub($sim) => $call,
             #[cfg(feature = "real-sim")]
             Simulator::Real($sim) => $call,
+            Simulator::Testnet($sim) => $call,
         }
     };
 }
@@ -33,9 +37,7 @@ pub type DifferentialReport = crate::sim_types::DifferentialReport;
 use crate::sim_real;
 use crate::sim_stub;
 pub use crate::sim_types::{Deployed, ExecOutcome, VaultStatus};
-
-#[cfg(all(feature = "stub", feature = "real-sim"))]
-compile_error!("les features `stub` et `real-sim` s'excluent : choisir un seul simulateur");
+use crate::testnet;
 
 /// Le simulateur utilisé par le garde-barrière.
 #[allow(clippy::large_enum_variant)]
@@ -45,6 +47,22 @@ pub enum Simulator {
     /// Vrai simulateur NEAR (`dryrun-sim`).
     #[cfg(feature = "real-sim")]
     Real(sim_real::Simulator),
+    /// Coffre déployé sur le testnet public NEAR.
+    Testnet(testnet::Simulator),
+}
+
+/// Ce qu'une exécution a donné : le résultat, le certificat éventuel et
+/// l'empreinte de transaction (uniquement sur une vraie chaîne).
+#[derive(Clone, Debug)]
+pub struct ExecutionReport {
+    /// Résultat de l'exécution.
+    pub outcome: ExecOutcome,
+    /// Certificat de simulation joint à la transaction (V1).
+    pub cert: Option<SignedCert>,
+    /// Vrai si la transaction est partie sur une chaîne publique.
+    pub on_chain: bool,
+    /// Empreinte de la transaction, sur une vraie chaîne.
+    pub tx_hash: Option<String>,
 }
 
 impl Simulator {
@@ -81,12 +99,30 @@ impl Simulator {
         ))
     }
 
+    /// Démarre le coffre déployé sur le testnet public NEAR.
+    pub async fn testnet(vault: &str, network: &str, rpc_url: &str) -> anyhow::Result<Self> {
+        Ok(Self::Testnet(
+            testnet::Simulator::start(vault, network, rpc_url).await?,
+        ))
+    }
+
     /// Vrai si ce simulateur est le bouchon.
     pub fn is_stub(&self) -> bool {
         match self {
             Self::Stub(_) => true,
             #[cfg(feature = "real-sim")]
             Self::Real(_) => false,
+            Self::Testnet(_) => false,
+        }
+    }
+
+    /// Vrai si ce simulateur pilote un coffre sur une vraie chaîne.
+    pub fn is_testnet(&self) -> bool {
+        match self {
+            Self::Stub(_) => false,
+            #[cfg(feature = "real-sim")]
+            Self::Real(_) => false,
+            Self::Testnet(_) => true,
         }
     }
 
@@ -115,6 +151,7 @@ impl Simulator {
             Self::Stub(sim) => sim.sim_public_key(),
             #[cfg(feature = "real-sim")]
             Self::Real(sim) => sim.sim_public_key(),
+            Self::Testnet(sim) => sim.sim_public_key(),
         }
     }
 
@@ -175,6 +212,38 @@ impl Simulator {
     /// Approuve un contrat (clé du propriétaire).
     pub async fn approve_contract(&self, account: &str, code_hash: &str) -> anyhow::Result<()> {
         dispatch!(self, sim => sim.approve_contract(account, code_hash).await)
+    }
+
+    /// Exécute une demande autorisée, en signant si le backend le demande.
+    ///
+    /// Sur le testnet, aucune `sim_key` n'est enregistrée sur le coffre : le
+    /// certificat de simulation n'y est pas exigé, l'action part avec
+    /// `cert: null`, signée par la clé du compte via la CLI NEAR.
+    pub async fn execute_approved(
+        &self,
+        demand: &Demande,
+        intent: &Intent,
+        effects: &Effects,
+    ) -> anyhow::Result<ExecutionReport> {
+        if self.is_testnet() {
+            let outcome = self.execute(demand).await?;
+            let tx_hash = Some(outcome.tx_hash.clone());
+            return Ok(ExecutionReport {
+                outcome,
+                cert: None,
+                on_chain: true,
+                tx_hash,
+            });
+        }
+        let post = crate::gate::post_conditions(intent);
+        let cert = self.sign_cert(demand, effects, post).await?;
+        let outcome = self.execute_with_cert(demand, Some(&cert)).await?;
+        Ok(ExecutionReport {
+            outcome,
+            cert: Some(cert),
+            on_chain: false,
+            tx_hash: None,
+        })
     }
 }
 

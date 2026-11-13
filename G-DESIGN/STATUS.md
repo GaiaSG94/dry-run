@@ -88,3 +88,39 @@
 - Tag `hackathon-submission` posé sur `main` et poussé sur les deux remotes.
 - **Vidéo brute enregistrée** : `G-DESIGN/video-demo-raw-2026-11-12.mp4` (42 s, 1280x736, 30 i/s) — serveur `--sim stub` port 8787 + fenêtre Chrome `--app` + capture ffmpeg gdigrab, `scripts/record-demo.sh` déroulé en entier (2 ALLOW, 2 BLOCK, gel final). Non commitée (brute, à monter selon `prompts/05-video.md`).
 - Note opérationnelle : le serveur `dryrun-gate serve --port 8791 --sim stub` tournant a dû être arrêté pour relinker le binaire pendant les tests ; relancé ensuite avec le binaire reconstruit, puis arrêté après la capture.
+
+## opencode (2026-11-13) — pare-feu branché sur le coffre testnet + 3 corrections MCP
+
+Demande de Claude (`G-DESIGN/HANDOFF.md`, 2026-11-13) : brancher `dryrun-gate` sur le coffre `dryrun-vault-1112.testnet`, et corriger les 3 points relevés par la vérification MCP. **Fait, pas bloqué.**
+
+### 1. Mode testnet (`--network testnet --vault <compte>`)
+
+- Nouveau module `crates/dryrun-gate/src/testnet/` : `rpc.rs` (client JSON-RPC minimal), `cli.rs` (CLI NEAR), `action.rs` (action du coffre), `mod.rs` (le simulateur testnet). Nouvelle variante `Simulator::Testnet` dans `backend.rs`.
+- `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet` et `dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet`. **Le mode local est inchangé par défaut** (`--network local` explicite possible).
+- `status()` est lu **par RPC** sur `https://rpc.testnet.near.org` → mêmes champs que `/api/status` (solde lu en plus sur `view_account`, `backend: "testnet"`).
+- Verdict : **les mêmes règles R1 à R12**, mais jugées contre les plafonds **réels** de la chaîne (2 NEAR/tx, 10 NEAR/24 h lus dans `status()`).
+- `ALLOW` → `execute(action, cert: null)` envoyé sur la chaîne, signé par la clé du compte ; la réponse HTTP (`tx_hash`, `on_chain`) et MCP porte l'empreinte. `BLOCK` / `WARN` → rien n'est envoyé.
+- **La clé n'est jamais lue, affichée ni copiée** : Dry Run appelle la CLI NEAR (`near-cli-rs`) qui la lit dans le trousseau Windows (`sign-with-keychain`). Binaire cherché dans le `PATH`, sinon `NEAR_CLI_BIN`.
+- Limite assumée : hors chaîne, les effets d'un **appel de contrat** ne sont pas rejoués — un appel vers un contrat inconnu tombe en R5 (`WARN`) et n'est donc pas envoyé. Un transfert est déterministe et est jugé exactement.
+- Le **gel d'urgence est refusé** en mode testnet (`DRYRUN_ALLOW_TESTNET_FREEZE=1` pour le forcer) : un gel réel dure ≥ 1 h et aurait cassé la démo du soir.
+
+### 2. Les 3 corrections MCP
+
+1. **Honnêteté** : la ligne « Exécuté sur chaîne : OUI » a disparu. Elle dit maintenant « le coffre local (simulation) » en local, « NEAR testnet · tx `<hash>` » en mode testnet (champ `on_chain` ajouté à `Outcome`).
+2. **Langue** : réponses **en anglais par défaut** (`--lang en`), français disponible (`--lang fr`). Module `crates/dryrun-gate/src/lang.rs` : libellés, carte des effets, outils et explications de règles traduits.
+3. **Protocole** : une **notification** (message JSON-RPC sans `id`) ne reçoit **aucune réponse** — plus de `id: null` sur `notifications/initialized`. Le traitement a été extrait dans `mcp::handle_request` pour être testable.
+
+### 3. Vérifications
+
+- **Session JSON-RPC réelle** contre le coffre testnet : 49 NEAR → **BLOCK** (R1, rien de signé, aucune transaction) ; 0,1 NEAR → **ALLOW** + tx [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa), relu sur la chaîne (`spent_24h` 0,1 → 0,2 NEAR, reçus tous verts). Mode HTTP vérifié de la même façon (tx `3Y6h4GSa…`).
+- Tests : 15 tests MCP (dont les 3 points corrigés), 12 tests CLI, 2 tests testnet ignorés par défaut (`--ignored` : ils dépensent de vrais testnet NEAR).
+- `cargo clippy --workspace --all-targets` : **zéro avertissement**. `cargo fmt --all` appliqué. `cargo test --workspace --lib --bins` : **vert**. `make sim` : F1 = 1,0000.
+- README : section « 6 ter / 6 quater » écrite (commandes, tableau local vs testnet, hash réel), ligne « Pare-feu branché sur testnet » passée de ⚠️ à ✅ dans le tableau des limites, section MCP mise à jour.
+- Environnement : `near-cli-rs` 0.31.1 réinstallée globalement (npm), NASM installé (le build release/clippy échouait sans lui sur cette machine — problème antérieur à ce travail, lié à `aws-lc-sys`/`near-crypto`).
+
+### 4. À savoir pour la vidéo B
+
+- Commande à filmer : `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet --lang en`.
+- Le compte `dryrun-vault-1112.testnet` est à **9,79 NEAR** ; `spent_24h` = 0,2 NEAR sur 10 NEAR. Chaque paiement réel de 0,1 NEAR consomme le plafond 24 h — ne pas en enchaîner.
+- Destinataire vérifié : `testnet` (compte existant). `mallory.test.near`, `bob.test.near` et `supplier.test.near` **n'existent pas** sur le testnet : un transfert vers eux échouerait sur la chaîne (le pare-feu, lui, bloque déjà 49 NEAR avant).
+- La transaction est réelle : le lien explorateur de la section 6 quater du README est cliquable et vérifiable par le jury.
