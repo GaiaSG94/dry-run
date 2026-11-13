@@ -163,7 +163,8 @@
     ["voleur demande", "thief asks"], ["propriétaire demande", "owner asks"], ["voleur : ", "thief: "],
     ["propriétaire : ", "owner: "], ["· présence", "· presence"], ["· clé publique", "· public key"],
     ["certificat ", "certificate "], ["présence", "presence"], ["clé publique", "public key"],
-    ["facture n°42", "invoice #42"]);
+    ["facture n°42", "invoice #42"], ["payer une facture", "pay invoice"],
+    [" NEAR au fournisseur (facture n°42)", " NEAR to the supplier (invoice #42)"], ["payer ", "pay "]);
   PAIRS.sort((a, b) => b[0].length - a[0].length);
 
   const cache = new Map();

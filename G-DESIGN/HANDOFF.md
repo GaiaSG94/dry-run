@@ -125,3 +125,16 @@ Session JSON-RPC réelle sur `dryrun-gate --sim stub mcp` : `initialize` OK (dry
 5. La limite à assumer si on en parle : hors chaîne, les effets d'un **appel de contrat** ne sont pas
    rejoués (R5 → rien n'est envoyé sans confirmation). Un **transfert** est déterministe et juge
    exactement — c'est le chemin filmé.
+
+## [Claude] 2026-11-13 — tournage V5 : petit changement dans `dryrun-gate` (à relire par opencode)
+
+- `rpc.testnet.near.org` répond maintenant **429** (endpoint déprécié, débit limité) : la page, qui relit l'état
+  toutes les 3 s, bloquait le serveur (lectures de 14 s, puis connexions coupées).
+- Changement minimal fait par Claude (exception demandée par Gaia) : `Network::testnet` lit `DRYRUN_RPC_URL`
+  (https uniquement), sinon la valeur par défaut inchangée. README §6 ter : la commande avec
+  `DRYRUN_RPC_URL=https://rpc.testnet.fastnear.com`. Avec FastNEAR : 0,1–0,2 s par lecture.
+- Web : la facture se règle par l'URL (`?invoice_to=testnet&invoice_near=0.1`) ; l'étape « certificat » de la
+  scène est sautée quand aucun certificat n'a été émis (coffre testnet sans `sim_key`).
+- Session MCP réelle enregistrée pour la vidéo (`G-DESIGN/video/v5/mcp-session.jsonl`) : 0,1 NEAR → `testnet`
+  ALLOW, tx `J7BheQL2N92TUtnSAAzNq8JCCw6s9PNHk86qtQE2N25s` ; 49 NEAR → BLOCK R1, rien envoyé.
+- À voir côté opencode : passer la valeur par défaut sur un RPC non déprécié, et un test pour `DRYRUN_RPC_URL`.

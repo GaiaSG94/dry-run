@@ -363,13 +363,16 @@ dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet --lang en
 
 # La page web et son API, branchés sur la chaîne
 dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
+
+# rpc.testnet.near.org est déprécié et limite le débit (erreurs 429) : choisir un autre fournisseur
+DRYRUN_RPC_URL=https://rpc.testnet.fastnear.com dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
 ```
 
 Ce que le mode change, et rien d'autre :
 
 | | Mode local (défaut) | Mode `--network testnet` |
 |---|---|---|
-| État du coffre | en mémoire ou bac à sable local | `status()` lu **par RPC** sur `https://rpc.testnet.near.org` |
+| État du coffre | en mémoire ou bac à sable local | `status()` lu **par RPC** (`https://rpc.testnet.near.org` par défaut, ou `DRYRUN_RPC_URL`) |
 | Verdict | mêmes règles R1 à R12 | mêmes règles R1 à R12, **jugées contre les plafonds réels** de la chaîne |
 | Verdict `ALLOW` | signé et exécuté en local | `execute(action, cert: null)` envoyé **sur la chaîne**, signé par la clé du compte |
 | Verdict `BLOCK` / `WARN` | rien n'est signé | rien n'est envoyé |

@@ -39,17 +39,22 @@
      un million de fois trop haut : le swap honnête finissait toujours en BLOCK R8. */
   const TEST_MIN = "1900000000000000000";
   const TEST_TO_24 = 1000000n; // 18 → 24 décimales, pour afficher les TEST avec DR.fmt
+  // facture : destinataire et montant réglables pour une démo sur le testnet, où le compte doit exister
+  // (?invoice_to=testnet&invoice_near=0.1) ; par défaut, le fournisseur fictif du coffre local
+  const QS = new URLSearchParams(location.search);
+  const INV_TO = QS.get("invoice_to") || "supplier.test.near";
+  const INV_NEAR = /^\d+(\.\d+)?$/.test(QS.get("invoice_near") || "") ? QS.get("invoice_near") : "1";
   const REQUESTS = [
     {
       // paiement honnête : un simple transfert sous le plafond, il passe (ALLOW) même avec le simulateur allégé
-      id: "invoice", label: "payer une facture · 1 Ⓝ", tag: "facture n°42", who: "agent IA",
-      say: "payer 1 NEAR au fournisseur (facture n°42)",
-      to: { id: "supplier.test.near", short: "supplier", type: "fournisseur", kind: "dex" },
-      motif: { receiver: "supplier.test.near", method: "transfer", args: "—", deposit: "1 NEAR", gas: "—" },
-      intentView: { beneficiaries: "supplier", min_in: "—" },
+      id: "invoice", label: "payer une facture · " + INV_NEAR + " Ⓝ", tag: "facture n°42", who: "agent IA",
+      say: "payer " + INV_NEAR + " NEAR au fournisseur (facture n°42)",
+      to: { id: INV_TO, short: "supplier", type: INV_TO === "supplier.test.near" ? "fournisseur" : INV_TO, kind: "dex" },
+      motif: { receiver: INV_TO, method: "transfer", args: "—", deposit: INV_NEAR + " NEAR", gas: "—" },
+      intentView: { beneficiaries: DR.short(INV_TO), min_in: "—" },
       body: {
-        kind: "transfer", to: "supplier.test.near", amount: YO("1").toString(),
-        intent: { summary: "payer la facture n°42 : 1 NEAR au fournisseur", beneficiaries: ["supplier.test.near"], min_in: [] },
+        kind: "transfer", to: INV_TO, amount: YO(INV_NEAR).toString(),
+        intent: { summary: "payer la facture n°42 : " + INV_NEAR + " NEAR au fournisseur", beneficiaries: [INV_TO], min_in: [] },
       },
     },
     {
@@ -122,10 +127,13 @@
   function effectsFrom(cv) {
     if (!cv) return [];
     const out = [];
-    (cv.near_deltas || []).forEach((d) => out.push({ acc: DR.short(d.account), d: big(d.delta_yocto), u: "NEAR" }));
+    // le coffre s'appelle « vault » dans la scène, quel que soit son compte (vault.test.near en local,
+    // dryrun-vault-1112.testnet sur le testnet) : sinon ses effets ne seraient ni comptés ni dessinés
+    const acc = (a) => (DR.live && a === DR.live.account ? "vault" : DR.short(a));
+    (cv.near_deltas || []).forEach((d) => out.push({ acc: acc(d.account), d: big(d.delta_yocto), u: "NEAR" }));
     (cv.ft_deltas || []).forEach((d) => {
       const u = DR.unitOf(d.token);
-      out.push({ acc: DR.short(d.account), d: big(d.delta) * (u === "TEST" ? TEST_TO_24 : 1n), u });
+      out.push({ acc: acc(d.account), d: big(d.delta) * (u === "TEST" ? TEST_TO_24 : 1n), u });
     });
     const rank = (e) => (e.acc === "vault" && e.u === "NEAR" ? 0 : e.acc === "vault" ? 1 : 2);
     return out.sort((a, b) => rank(a) - rank(b));
@@ -144,6 +152,7 @@
       })),
       end: last.executed ? "executed" : "refused",
       cert: last.cert || null,
+      noCert: !last.cert,   // la scène saute alors l'étape « certificat » (rien de tel n'a été vérifié)
     }, extra || {});
   }
 

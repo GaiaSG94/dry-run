@@ -26,12 +26,17 @@ impl Network {
         Network::Local
     }
 
-    /// Réseau testnet public.
+    /// Réseau testnet public. `DRYRUN_RPC_URL` remplace le point d'accès RPC par défaut
+    /// (rpc.testnet.near.org est déprécié et limite le débit : erreurs 429).
     pub fn testnet(vault: String) -> Self {
+        let rpc_url = std::env::var("DRYRUN_RPC_URL")
+            .ok()
+            .filter(|u| u.starts_with("https://"))
+            .unwrap_or_else(|| crate::testnet::rpc::TESTNET_RPC_URL.to_string());
         Network::Chain {
             vault,
             name: "testnet".to_string(),
-            rpc_url: crate::testnet::rpc::TESTNET_RPC_URL.to_string(),
+            rpc_url,
         }
     }
 }

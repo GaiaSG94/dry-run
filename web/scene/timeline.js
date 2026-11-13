@@ -52,7 +52,8 @@
         push(i, "verdict", 1.4, { pass: pi });
         if (P.verdict === "WARN") push(i, "approve", 2.0, { pass: pi });
         if (P.verdict === "ALLOW") {
-          push(i, "cert", 2.4, { pass: pi, n: 7 });
+          // pas d'étape « certificat » quand aucun certificat n'a été émis (coffre testnet sans sim_key)
+          if (!S.noCert) push(i, "cert", 2.4, { pass: pi, n: 7 });
           push(i, "chain", 1.8, { pass: pi });
           push(i, "proof", 2.2, { pass: pi });
         }

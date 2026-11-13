@@ -77,3 +77,19 @@ without paraphrase, with the 3D still visible; (5) represent the whole tech stac
   104.8 why NEAR: function-call access keys · async receipts → simulate first (near-sandbox + patch_state) ·
   Rust vault + caps + env::ed25519_verify · live on testnet (5 NEAR refused, real tx) · 134.3 end card.
 - Voice: 18 lines, ElevenLabs eleven_v3, a cloned voice, tempo 1.15; 46 phrase captions.
+
+## V5 — 2026-11-13 · 2:20, « Ada's day » : un parcours utilisateur de A à Z, sur le vrai testnet
+
+Validé par Gaia (recadrage B, `v5/STORYBOARD.md`). Une personne, une histoire : Ada confie son portefeuille NEAR à son
+agent IA, qui paie ses factures ; une vraie tâche réussie, une vraie attaque arrêtée, les autres cas en accéléré, NEAR.
+- 0–39 s : la boîte mail de l'agent, puis l'agent ⇄ `dryrun-mcp` (vrais `tools/list` et `wallet_status`), puis la
+  facture n°42 : **0,1 NEAR payés pour de vrai sur NEAR testnet**. Colonne : la vraie session MCP
+  (`v5/mcp-session.jsonl`, tx `J7BheQL2N92TUtnSAAzNq8JCCw6s9PNHk86qtQE2N25s`). 3D : la même demande rejouée en direct
+  par la page branchée au testnet (`dryrun-gate serve --network testnet`, second paiement réel).
+- 39–65 s : l'e-mail piégé, 49 NEAR → mallory, chaque étape du bac à sable, R1, BLOCK avant signature, `wallet_explain`,
+  l'agent prévient Ada.
+- 65–89 s : « ce que Dry Run arrête aussi » sur un pare-feu local (drainer, double visage, clé volée enregistrée) et le
+  gel (refusé sur testnet par conception).
+- 90–124 s : Why NEAR (4 angles), page testnet au repos ; 124,5–140 s : carte de fin.
+- Corrections faites pour que l'écran dise vrai : effets du coffre reconnus sous son compte testnet (sinon « none »),
+  étape « certificat » sautée quand aucun certificat n'est émis, `DRYRUN_RPC_URL` (rpc.testnet.near.org renvoie 429).
