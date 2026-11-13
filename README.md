@@ -535,6 +535,19 @@ L'honnêteté vaut mieux qu'une promesse : voici ce qui marche, et ce qui ne mar
 
 ---
 
+## 10 bis. Historique et provenance du dépôt
+
+- **Tout le code date du hackathon.** Le premier commit est du 10 novembre 2026 (13:43), après l'annonce du
+  19 octobre ; aucun code antérieur n'est repris. Historique complet :
+  <https://github.com/GaiaSG94/dry-run/commits/main>.
+- **Les deux premiers commits sont volumineux** (10/11 : squelette, types et règles, puis contrats, simulateur,
+  garde-barrière et web, environ 17 000 lignes) : cette base a été produite avec les agents IA déclarés en
+  section 10, puis commitée en deux blocs. La suite de l'historique est incrémentale (une vingtaine de commits
+  et de demandes de fusion jusqu'au 14/11).
+- **Tag de soumission** : `hackathon-submission` marque le commit soumis.
+
+---
+
 ## 11. Licence
 
 Double licence **MIT** ou **Apache-2.0**, au choix.
