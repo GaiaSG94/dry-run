@@ -7,6 +7,8 @@
 (function () {
   "use strict";
   const DR = (window.DR = window.DR || {});
+  // ?labels=1.7 grows every label (video capture); the site keeps 1 by default
+  const LABEL_SCALE = Math.max(0.5, Math.min(3, parseFloat(new URLSearchParams(location.search).get("labels")) || 1));
 
   DR.withLabels = function (R) {
     R.L = [];
@@ -24,7 +26,7 @@
       const minX = R.padL + 6, maxX = R.W - R.padR - 6, minY = R.padT + 4, maxY = R.H - 6;
       const list = R.L.sort((a, b) => a.o.pr - b.o.pr);
       for (const L of list) {
-        const o = L.o, k = R.narrow ? 0.86 : 1, fs = o.size * k, ss = (o.subSize || Math.max(11, o.size * 0.72)) * k;
+        const o = L.o, k = (R.narrow ? 0.86 : 1) * LABEL_SCALE, fs = o.size * k, ss = (o.subSize || Math.max(11, o.size * 0.72)) * k;
         const fam = o.mono ? DR.MONO : DR.SANS;
         ctx.font = `${o.weight} ${fs}px ${fam}`;
         if (o.ls) ctx.letterSpacing = o.ls + "px";
