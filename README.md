@@ -333,6 +333,42 @@ Dry Run s'appuie sur trois primitives fondamentales de NEAR :
 
 ---
 
+## 6 bis. Le coffre déployé sur NEAR Testnet
+
+Le contrat `vault` tourne sur le testnet public, sur le compte
+**[`dryrun-vault-1112.testnet`](https://testnet.nearblocks.io/address/dryrun-vault-1112.testnet)**
+(déployé le 2026-11-12, plafonds de 2 NEAR par transaction et de 10 NEAR sur 24 h).
+
+| Étape | Résultat sur la chaîne | Transaction |
+|---|---|---|
+| Déploiement du code | contrat installé | [`D6QiwMAK…`](https://explorer.testnet.near.org/transactions/D6QiwMAKBLsvyCEN7hb8Em4fJ1qnZLV9p4nsjHKA7qjV) |
+| `new` (initialisation) | owner, `tx_cap` 2 NEAR, `daily_cap` 10 NEAR | [`7JDQgzM8…`](https://explorer.testnet.near.org/transactions/7JDQgzM8TKYCYgL4awiZzKtKEdZeYb5UBk9SFHEMu9Ed) |
+| `execute` : 5 NEAR vers `testnet` | **refusé** : `ERR_OVER_TX_CAP`, rien ne sort | [`3YDpi4y9…`](https://explorer.testnet.near.org/transactions/3YDpi4y9tTBJDBmu5VFCn1zFRPc1K3hBz3MHqQrqnjmB) |
+| `execute` : 0,1 NEAR vers `testnet` | **exécuté**, `spent_24h` = 0,1 NEAR | [`HdZr1wuS…`](https://explorer.testnet.near.org/transactions/HdZr1wuSSQSJQ3jcsHhqjzuEgP1opAfv6tdMdFTupck6) |
+
+Pour relire l'état :
+
+```bash
+near contract call-function as-read-only dryrun-vault-1112.testnet status json-args '{}' network-config testnet now
+```
+
+**Ce que ça prouve :** le dernier rempart du coffre (plafonds par transaction et
+sur 24 h, journal, événements NEP-297) s'applique sur une vraie chaîne, hors de
+toute simulation locale.
+
+**Ce que ça ne prouve pas encore :**
+- `dryrun-gate` (API HTTP, CLI, MCP, page web) n'a pas encore de mode testnet. Il
+  juge toujours les demandes sur un coffre en mémoire (`vault.test.near`). Le relier
+  au coffre testnet (lecture de `status()` par RPC, envoi des demandes ALLOW à
+  `execute`) est le prochain chantier.
+- Aucune `sim_key` n'est enregistrée : le certificat V1 n'est pas exigé sur ce
+  déploiement.
+- Pour la démonstration, le coffre est son propre `owner` et garde sa clé
+  `FullAccess`. En production, on retire cette clé et on donne à l'agent une clé
+  limitée à `execute` (section 6, point 1).
+
+---
+
 ## 7. Structure du dépôt
 
 ```text
@@ -481,7 +517,8 @@ L'honnêteté vaut mieux qu'une promesse : voici ce qui marche, et ce qui ne mar
 | **Simulation différentielle** (R12) | ✅ | Branchée sur le **chemin par défaut** : tout appel de contrat avec dépôt est rejoué au centième (`Gatekeeper::propose`). Les deux rejeux tournent en parallèle, la latence ne double pas. |
 | Portée de R12 | ⚠️ | R12 est **orienté** : il ne mord que si le petit montant est proportionnellement mieux traité que le montant réel (signature du double visage). Un contrat à **dépôt minimum fixe** (comme `good-dex` ici, 2 NEAR) ne peut pas être rejoué au centième : R12 n'apporte alors aucun signal et les autres règles tranchent. Un contrat à prix fixe légitime peut être signalé — assumé, le seuil est à 100 ‰ (le SPEC annonce 5 %, mais une courbe de liaison honnête dérive déjà de plusieurs pour cent entre 2 NEAR et 0,02 NEAR). |
 | **Témoin « wallet nu »** | ⚠️ | Le témoin est joué **après** le corpus, sur le coffre protégé : il montre `ERR_NO_CERT` (la défense V1), pas la perte de fonds brute. La perte brute est documentée dans le tableau de la section 5 et montrée par la simulation. |
-| Testnet public | ⚠️ | `make demo-testnet` vérifie la connectivité au RPC testnet et donne la procédure de déploiement ; le déploiement réel exige un compte testnet avec des fonds. |
+| Coffre sur testnet public | ✅ | Déployé sur `dryrun-vault-1112.testnet` : plafond vérifié sur la chaîne (5 NEAR refusé, 0,1 NEAR exécuté). Voir la section 6 bis. |
+| Pare-feu branché sur testnet | ⚠️ | `dryrun-gate` juge encore sur un coffre en mémoire ; il n'appelle pas le coffre testnet. |
 | Enclave TEE (MAX) | ❌ | Non commencé. La clé du simulateur vit dans le processus du garde-barrière. |
 
 ---

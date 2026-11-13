@@ -27,6 +27,21 @@
 - Vérifié en live (`--sim stub`, port 8791) : connexion, ligne « Mode réel » dans l'étiquette, « injection 49 Ⓝ » → BLOCK R1 rejoué par la scène.
 - Non fait : rendu mobile ; le swap good-dex reste BLOCK R8 avec `--sim stub` (limite du simulateur allégé).
 
+### 2026-11-12 · 22 h 40 — vérification V9 + demande testnet
+
+- `main` vérifié à l'écran (V9 « Plateau » + HUD de la PR #2) : grande étiquette, ligne « démo / mode réel » avant tout lancement, attaques en boutons, contours 3D épais. Ordinateur 1440 px : aucun chevauchement, la retouche `padT +70` annulée est inutile.
+- Mode réel testé contre `dryrun-gate serve` (port 8787, stub) : 49 NEAR vers mallory → BLOCK R1 ; 1 NEAR vers owner → ALLOW (le coffre en mémoire passe à 49 NEAR).
+- Mobile 375 px : le mode réel se connecte, mais la scène est petite, les étiquettes se chevauchent et le terminal est absent. Reste design.
+- Testnet demandé par Gaia : `dryrun-gate` n'a pas de mode testnet. Le script ne déploie que le contrat. Demande et options consignées dans `G-DESIGN/HANDOFF.md` (recommandation : option A).
+- Ajouté : `.claude/launch.json` (aperçu local de `web/`, non commité).
+
+### 2026-11-12 · 23 h — coffre déployé sur testnet (exception : fait par Claude)
+
+- `dryrun-vault-1112.testnet` : compte créé (faucet), `vault` déployé et initialisé (2 NEAR / tx, 10 NEAR / 24 h).
+- Vérifié sur la chaîne : 5 NEAR → `ERR_OVER_TX_CAP` ; 0,1 NEAR → exécuté.
+- README section « 6 bis » + tableau des limites, branche `docs/testnet-vault`, non commitée.
+- Reste : relier `dryrun-gate` au coffre testnet (code).
+
 ## opencode
 
 - 2026-11-12 · branche `ui-v8-terminal` (nouvelle, poussée sur origin).
