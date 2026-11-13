@@ -1,0 +1,20 @@
+# Demo-video sources are versioned; renders, captures and audio stay local (too large for git).
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.jpg
+*.png
+frames/
+raw/
+raw3/
+seq/
+assets/
+voice/
+.hyperframes/
+.waveform-cache/
+node_modules/
+renders/
+*.log
+AGENTS.md
+CLAUDE.md

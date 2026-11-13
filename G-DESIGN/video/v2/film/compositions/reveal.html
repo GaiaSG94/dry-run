@@ -1,0 +1,31 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; background: #000; font-family: "Inter", sans-serif; }
+    #rev-name { position: absolute; left: 96px; top: 150px; font: 800 186px/0.95 "Inter", sans-serif; letter-spacing: -0.04em; color: #f4f7f5; white-space: nowrap; }
+    #rev-play { position: absolute; left: 96px; top: 380px; font: 800 150px/1 "Inter", sans-serif; letter-spacing: -0.035em; color: #f4f7f5; white-space: nowrap; }
+    #rev-first { position: relative; display: inline-block; }
+    #rev-under { position: absolute; left: 0; right: 0; bottom: -14px; height: 14px; background: #f4f7f5; transform-origin: 0 50%; }
+    #rev-copy { position: absolute; left: 96px; top: 610px; display: flex; align-items: center; gap: 46px; }
+    #rev-copy svg { width: 230px; height: 230px; }
+    #rev-copy span { font: 700 72px/1.05 "Inter", sans-serif; color: #f4f7f5; letter-spacing: -0.02em; }
+  </style>
+  <div id="root" data-composition-id="reveal" data-width="1920" data-height="1080">
+    <div id="rev-name" class="clip" data-start="0" data-duration="6.4">Dry Run catches it</div>
+    <div id="rev-play" class="clip" data-start="2.9" data-duration="3.5">and plays it <span id="rev-first">first<i id="rev-under"></i></span></div>
+    <div id="rev-copy" class="clip" data-start="3.9" data-duration="2.5">
+      <svg viewBox="0 0 230 230" fill="none" stroke-width="10"><rect id="rev-chain" x="10" y="10" width="140" height="140" stroke="#f4f7f5"/><rect id="rev-twin" x="80" y="80" width="140" height="140" stroke="#f4f7f5" stroke-dasharray="20 14"/></svg>
+      <span>in a copy<br>of the chain</span>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#rev-name", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 18 / 30, ease: "steps(18)" }, 0.12);
+    tl.fromTo("#rev-play", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 18 / 30, ease: "steps(18)" }, 2.95);
+    tl.fromTo("#rev-under", { scaleX: 0 }, { scaleX: 1, duration: 8 / 30, ease: "none" }, 3.6);
+    // the chain, then its copy printed beside it
+    tl.fromTo("#rev-chain", { strokeDasharray: "560 560", strokeDashoffset: 560 }, { strokeDashoffset: 0, duration: 0.35, ease: "none" }, 3.95);
+    tl.fromTo("#rev-twin", { opacity: 0, x: -70, y: -70 }, { opacity: 1, x: 0, y: 0, duration: 0.45, ease: "power3.out" }, 4.3);
+    tl.fromTo("#rev-copy span", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "steps(14)" }, 4.3);
+    window.__timelines["reveal"] = tl;
+  </script>
+</template>

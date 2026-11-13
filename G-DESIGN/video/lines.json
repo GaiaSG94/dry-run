@@ -1,0 +1,11 @@
+[
+  {"id": "intro", "chapter": "", "text": "[confident] This is Dry Run. A firewall for an AI agent's wallet on NEAR... where every transaction happens twice: first in a copy of the chain, then for real, only if it is safe."},
+  {"id": "problem", "chapter": "The problem", "text": "[serious] AI agents now hold real money. One poisoned prompt, one malicious contract, and the wallet is empty before anyone can react."},
+  {"id": "inject", "chapter": "1 · Prompt injection", "text": "[firm] Here is a real attack, sent live to the firewall. A prompt injection tells the agent: send forty-nine NEAR to mallory. Dry Run copies the chain, plays the transfer as the vault, and reads what would really leave: forty-nine NEAR. The cap rule fires. Blocked. Nothing was signed."},
+  {"id": "drainer", "chapter": "2 · Malicious contract", "text": "Next, a contract that promises a swap: two NEAR in, at least one point nine TEST tokens back. Dry Run plays it in the copy. Two NEAR go out... and nothing comes back. Less received than promised. Blocked, before any signature."},
+  {"id": "swap", "chapter": "3 · Honest swap (recorded run)", "text": "And an honest swap? This one is a recorded run of the full simulator. First contact with a new exchange: the owner approves it once. Then the copy shows two NEAR out, one point nine six TEST in. Allowed. The vault checks a signed certificate, and the real result matches the simulation."},
+  {"id": "freeze", "chapter": "4 · Kill switch", "text": "[calm] If anything still feels wrong, the owner freezes the vault in one tap. From then on, every request is refused."},
+  {"id": "testnet", "chapter": "On NEAR testnet", "text": "[matter-of-fact] And the vault contract is live on NEAR testnet. Ask it for five NEAR, above its two NEAR cap: the chain itself refuses."},
+  {"id": "bench", "chapter": "Tested", "text": "On a synthetic bench of two hundred requests, one hundred honest and one hundred attacks: every attack blocked, zero false refusals."},
+  {"id": "cta", "chapter": "", "text": "[warmly] Dry Run. Every transaction happens twice... so your agent's mistakes never happen once. Built at NEAR HACKATHON."}
+]

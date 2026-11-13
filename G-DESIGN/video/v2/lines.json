@@ -1,0 +1,9 @@
+[
+  {"id": "hook", "text": "[tense] Your AI agent just read this."},
+  {"id": "tension", "text": "It holds fifty NEAR. It has the keys. One bad prompt is enough."},
+  {"id": "reveal", "text": "[confident] Dry Run catches the request... and plays it first, in a copy of the chain."},
+  {"id": "proof", "text": "In the copy, forty-nine NEAR would leave the vault. That breaks the two NEAR cap. [firm] Blocked, before any signature."},
+  {"id": "payoff", "text": "[relieved] The real wallet never moved."},
+  {"id": "near", "text": "On NEAR, the agent's key can only call the vault, and the vault enforces its cap on-chain. On testnet: five NEAR... refused."},
+  {"id": "end", "text": "[warmly] Dry Run. Every transaction happens twice. What would you let your agent spend without asking?"}
+]

@@ -41,6 +41,18 @@
   const TEST_TO_24 = 1000000n; // 18 → 24 décimales, pour afficher les TEST avec DR.fmt
   const REQUESTS = [
     {
+      // paiement honnête : un simple transfert sous le plafond, il passe (ALLOW) même avec le simulateur allégé
+      id: "invoice", label: "payer une facture · 1 Ⓝ", tag: "facture n°42", who: "agent IA",
+      say: "payer 1 NEAR au fournisseur (facture n°42)",
+      to: { id: "supplier.test.near", short: "supplier", type: "fournisseur", kind: "dex" },
+      motif: { receiver: "supplier.test.near", method: "transfer", args: "—", deposit: "1 NEAR", gas: "—" },
+      intentView: { beneficiaries: "supplier", min_in: "—" },
+      body: {
+        kind: "transfer", to: "supplier.test.near", amount: YO("1").toString(),
+        intent: { summary: "payer la facture n°42 : 1 NEAR au fournisseur", beneficiaries: ["supplier.test.near"], min_in: [] },
+      },
+    },
+    {
       id: "swap", label: "swap good-dex", tag: "swap honnête", who: "agent IA",
       say: "échanger 2 NEAR contre ≥ 1,9 TEST",
       to: { id: "good-dex.test.near", short: "good-dex", type: "contrat DEX", kind: "dex" },

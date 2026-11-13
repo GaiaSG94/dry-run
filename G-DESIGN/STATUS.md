@@ -42,6 +42,20 @@
 - README section « 6 bis » + tableau des limites, branche `docs/testnet-vault`, non commitée.
 - Reste : relier `dryrun-gate` au coffre testnet (code).
 
+### 2026-11-13 · nuit — vidéo démo V1 (voix) + page en anglais
+
+- La vidéo brute d'opencode (`video-demo-raw-2026-11-12.mp4`) est **inutilisable** : elle filme l'app Claude, avec des conversations privées. À ne pas publier.
+- Page en anglais : `web/scene/i18n.js`, actif seulement avec `?lang=en` (le français reste par défaut). Il traduit le DOM, les étiquettes 3D (canvas) et la boîte de gel. Une ligne ajoutée dans `web/index.html`. Non commité.
+- Vidéo V1 : `G-DESIGN/video/dryrun-demo.mp4`, 104 s, 1440×920, voix ElevenLabs (voix clonée), sous-titres dans un bandeau. Script et chaîne : `G-DESIGN/video/SCRIPT.md`.
+- Contrôle : −16,9 LUFS, plus long silence 2,3 s, sous la limite X de 2 min 20.
+- Retour de Gaia sur la V1 : « pas assez moderne ». Attendus relevés sur nearhackathon.com + HACKATHON.md (problème d'abord, un seul moment complet action → résultat, rôle concret de NEAR, prochaine étape + question ; pas d'intro longue, pas de schéma d'architecture). Pistes V2 proposées, en attente du choix.
+- Gaia a choisi la piste A (typo cinétique), puis le scénario « The message ». V2 construite avec HyperFrames : `G-DESIGN/video/v2/film/`, rendu `G-DESIGN/video/v2/dryrun-demo-v2.mp4` (45,5 s). `npx hyperframes check` : 0 erreur, 0 avertissement. `web/scene/i18n.js` complété (« R1 · cap »).
+- V3 (retours de Gaia : ouvrir sur le schéma 3D, plus de zoom, meilleure résolution) : `G-DESIGN/video/v3/film/`, page filmée en 3840×2160 au ralenti 0,75, plan fixe, rendu 4K + version 1080p pour X.
+- V4 (retours de Gaia : 2:20 pile, tous les cas, problème limpide, NEAR technique sous plusieurs angles avec la 3D visible, stack complète, étiquettes plus grosses) : `G-DESIGN/video/v4/`, `web/scene/labels.js` (`?labels=`) et `i18n.js` (`?stack=1`) modifiés, site par défaut inchangé.
+- 2026-11-13 : Gaia valide la V4 (2:20) et choisit le recadrage B « parcours utilisateur » (une personne, l'agent branché par MCP, fin heureuse). Demande à opencode dans `HANDOFF.md` : brancher `dryrun-gate` sur le coffre testnet (~6 h, avant 20h Paris), sinon vidéo B sans signature sur la chaîne. MCP vérifié avec un vrai client (BLOCK R1 / ALLOW) ; 3 corrections demandées (« Exécuté sur chaîne : OUI » trompeur en local, réponses en français, réponse à une notification). Prochaine étape Claude : découpage de la vidéo B, puis tournage dès le retour d'opencode.
+- 2026-11-13 : découpage de la vidéo V5 « parcours utilisateur » validé par Gaia (`G-DESIGN/video/v5/STORYBOARD.md`). Ajout, à sa demande, du bouton « payer une facture · 1 Ⓝ » (EN : « pay invoice · 1 Ⓝ ») dans `web/scene/live.js` + traductions dans `i18n.js` : transfert de 1 NEAR vers supplier.test.near, ALLOW vérifié contre le vrai pare-feu (stub), site FR et EN vérifiés. Non commité. Tournage V5 dès le retour d’opencode (testnet + MCP), au plus tard ce soir 20h.
+- Défauts V1 (sans objet si la V2 est retenue) : virgule française dans « 1,96 TEST » et « F1 1,00 », « certificat 1/7 » non traduit dans le terminal, ligne « owner: approval » en double (saut dans le film), parenthèse qui passe à la ligne sur la carte testnet, plaque « FROZEN » visible pendant le banc.
+
 ## opencode
 
 - 2026-11-12 · branche `ui-v8-terminal` (nouvelle, poussée sur origin).

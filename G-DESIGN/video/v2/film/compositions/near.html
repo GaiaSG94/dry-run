@@ -1,0 +1,45 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; background: #000; font-family: "Inter", sans-serif; }
+    #nr-head { position: absolute; left: 96px; top: 110px; font: 800 150px/1 "Inter", sans-serif; letter-spacing: -0.035em; color: #f4f7f5; white-space: nowrap; }
+    #nr-key { position: absolute; left: 96px; top: 330px; display: flex; align-items: center; gap: 34px; }
+    #nr-key svg { width: 170px; height: 80px; }
+    #nr-key span { font: 600 72px/1 "JetBrains Mono", monospace; color: #f4f7f5; }
+    #nr-cap { position: absolute; left: 96px; top: 470px; font: 600 72px/1 "JetBrains Mono", monospace; color: #f4f7f5; }
+    #nr-cap b, #nr-key b { color: #f4f7f5; font-weight: 800; }
+    #nr-tx { position: absolute; left: 96px; top: 130px; width: 1728px; }
+    #nr-tx .ln { font: 600 60px/1.25 "JetBrains Mono", monospace; color: #f4f7f5; white-space: nowrap; }
+    #nr-tx .sm { font: 500 40px/1.4 "JetBrains Mono", monospace; color: #8a9690; white-space: nowrap; }
+    #nr-tx .net { font: 800 92px/1.1 "Inter", sans-serif; letter-spacing: -0.03em; margin-bottom: 40px; }
+    #nr-refused { font: 800 120px/1.1 "Inter", sans-serif !important; letter-spacing: -0.03em; margin-top: 24px; }
+    #nr-refused span { font: 600 56px/1 "JetBrains Mono", monospace; color: #f4f7f5; margin-left: 30px; vertical-align: middle; }
+  </style>
+  <div id="root" data-composition-id="near" data-width="1920" data-height="1080">
+    <div id="nr-head" class="clip" data-start="0" data-duration="6.1">On NEAR</div>
+    <div id="nr-key" class="clip" data-start="0" data-duration="6.1">
+      <svg viewBox="0 0 170 80" fill="none" stroke="#f4f7f5" stroke-width="10"><circle cx="40" cy="40" r="29"/><path d="M69 40h94M134 40v28M157 40v20"/></svg>
+      <span>agent key → <b>execute()</b> only</span>
+    </div>
+    <div id="nr-cap" class="clip" data-start="0" data-duration="6.1">vault cap → <b>2 NEAR / tx</b>, on-chain</div>
+    <div id="nr-tx" class="clip" data-start="6.1" data-duration="4.9">
+      <div class="ln net" id="nr-net">NEAR testnet</div>
+      <div class="ln" id="nr-acct">dryrun-vault-1112.testnet</div>
+      <div class="ln" id="nr-call">execute( transfer 5 NEAR )</div>
+      <div class="ln" id="nr-refused">refused<span>ERR_OVER_TX_CAP</span></div>
+      <div class="sm" id="nr-hash">tx 3YDpi4y9tTBJDBmu5VFCn1zFRPc1K3hBz3MHqQrqnjmB</div>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    const print = (sel, at, n) => tl.fromTo(sel, { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: n / 30, ease: "steps(" + n + ")" }, at);
+    print("#nr-head", 0.15, 7);
+    print("#nr-key", 0.9, 20);           // "the agent's key can only call the vault"
+    print("#nr-cap", 3.1, 22);           // "and the vault enforces its cap on-chain"
+    print("#nr-net", 6.15, 12);          // "On testnet:"
+    print("#nr-acct", 6.55, 18);
+    print("#nr-call", 7.3, 18);          // "five NEAR…"
+    print("#nr-refused", 9.7, 7);        // "refused."
+    print("#nr-hash", 9.95, 24);
+    window.__timelines["near"] = tl;
+  </script>
+</template>

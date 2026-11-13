@@ -1,0 +1,25 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; background: #000; overflow: hidden; }
+    #pr-cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+    #pr-video { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; object-fit: contain; }
+  </style>
+  <div id="root" data-composition-id="proof" data-width="1920" data-height="1080" data-layout-allow-overflow>
+    <div id="pr-cam">
+      <!-- the real page answering the real request (live firewall, ?lang=en), filmed frame by frame -->
+      <video id="pr-video" class="clip" src="assets/inject.mp4" data-start="0" data-duration="9" data-media-start="5.5" data-track-index="0" muted playsinline></video>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    // camera: centre the point (px, py) of the page at scale s
+    const at = (px, py, s) => ({ x: 960 - px * s, y: 540 - py * s, scale: s });
+    const move = { duration: 0.5, ease: "power3.inOut" };
+    tl.fromTo("#pr-cam", at(760, 380, 1.55), Object.assign(at(720, 340, 1.75), { duration: 2.2, ease: "none" }), 0);   // the copy runs
+    tl.to("#pr-cam", Object.assign(at(670, 300, 2.2), move), 2.25);    // "forty-nine NEAR would leave the vault": −49 NEAR
+    tl.to("#pr-cam", Object.assign(at(990, 330, 2.0), move), 3.95);    // "That breaks the two NEAR cap": R1 lights
+    tl.to("#pr-cam", Object.assign(at(1000, 300, 1.62), move), 5.5);   // BLOCK lands at 6.1 (voice "Blocked")
+    tl.to("#pr-cam", Object.assign(at(960, 470, 1.18), { duration: 0.6, ease: "power3.inOut" }), 7.2); // pull back: nothing signed
+    window.__timelines["proof"] = tl;
+  </script>
+</template>

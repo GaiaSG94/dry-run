@@ -1,0 +1,13 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; background: #000; }
+    #page-video { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; object-fit: contain; }
+  </style>
+  <!-- fixed frame, no camera move: the page clock was keyframed during capture so each beat meets its voice line -->
+  <div id="root" data-composition-id="page" data-width="1920" data-height="1080">
+    <video id="page-video" class="clip" src="assets/page4k.mp4" data-start="0" data-duration="134.3" data-track-index="0" muted playsinline></video>
+  </div>
+  <script>
+    window.__timelines["page"] = gsap.timeline({ paused: true });
+  </script>
+</template>

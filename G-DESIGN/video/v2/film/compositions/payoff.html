@@ -1,0 +1,21 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; background: #000; font-family: "Inter", sans-serif; }
+    #pay-block { position: absolute; left: 80px; top: 120px; font: 900 400px/0.9 "Inter", sans-serif; letter-spacing: -0.05em; color: #3dffb0; white-space: nowrap; }
+    #pay-bal { position: absolute; left: 96px; top: 640px; font: 700 150px/1 "JetBrains Mono", monospace; color: #f4f7f5; letter-spacing: -0.03em; }
+    #pay-note { position: absolute; left: 96px; top: 830px; font: 600 64px/1 "Inter", sans-serif; color: #8a9690; }
+  </style>
+  <div id="root" data-composition-id="payoff" data-width="1920" data-height="1080">
+    <div id="pay-block" class="clip" data-start="0" data-duration="3">BLOCK</div>
+    <div id="pay-bal" class="clip" data-start="0.55" data-duration="2.45">50 NEAR</div>
+    <div id="pay-note" class="clip" data-start="0.9" data-duration="2.1">still there. nothing was signed.</div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    // stamped, not faded: one frame of overshoot, then still
+    tl.fromTo("#pay-block", { scale: 1.06, transformOrigin: "0% 50%" }, { scale: 1, duration: 3 / 30, ease: "none" }, 0);
+    tl.fromTo("#pay-bal", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 7 / 30, ease: "steps(7)" }, 0.55);
+    tl.fromTo("#pay-note", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 0.5, ease: "steps(16)" }, 0.9);
+    window.__timelines["payoff"] = tl;
+  </script>
+</template>
