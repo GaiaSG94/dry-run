@@ -7,6 +7,7 @@
 > Built by **GaiaSG94** (@GaiaSG94).
 > Repository: <https://github.com/GaiaSG94/dry-run>
 > Live demo (scripted, no install): <https://gaiasg94.github.io/dry-run/?lang=en>
+> Other NEAR HACKATHON project by the same builder (independent): [Hireclaw](https://github.com/GaiaSG94/hireclaw), track Agent Economy.
 
 ---
 
