@@ -1,0 +1,102 @@
+name: sandbox
+
+# Second workflow, distinct de `ci` : il prouve les affirmations qui ne
+# peuvent pas tenir sur un runner sans bac à sable NEAR.
+#
+# `ci` (rapide, ~2 min) prouve : format, clippy, tests unitaires, banc 200
+# robots, compilation WASM.
+# `sandbox` (plus lent) prouve, sur le vrai bac à sable NEAR local :
+#   - le post-check V1 (`tests/v1_post_check.rs`) ;
+#   - la démo complète (`make demo`), 7 invariants ;
+#   - le corpus de 7 pièges (`make attack`), 7/7 avant signature.
+#
+# C'est aussi la machine Linux dont le dépôt dispose : sans ce job, les
+# chiffres « 7/7 » du README ne seraient prouvés par rien.
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - feat/honest-stub-ci-proof
+
+concurrency:
+  group: sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  full-simulator:
+    name: bac à sable NEAR réel (démo + corpus + post-check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: dryrun-ci
+
+      - name: Cache du bac à sable NEAR téléchargé
+        uses: actions/cache@v4
+        with:
+          path: ~/.near
+          key: near-sandbox-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Build (contrats WASM + outils)
+        run: make build
+
+      - name: Post-check V1 (bac à sable réel)
+        run: |
+          set -o pipefail
+          cargo test -p dryrun-sim --test v1_post_check -- --nocapture 2>&1 | tee post_check.log
+
+      - name: Démo complète (make demo)
+        run: |
+          set -o pipefail
+          make demo 2>&1 | tee demo.log
+
+      - name: Corpus d'attaque (make attack)
+        run: |
+          set -o pipefail
+          make attack 2>&1 | tee attack.log
+
+      - name: Banc 200 robots (make sim)
+        run: |
+          set -o pipefail
+          make sim 2>&1 | tee sim.log
+
+      - name: Résumé des chiffres mesurés
+        if: always()
+        run: |
+          {
+            echo "## Chiffres mesurés sur le vrai bac à sable (ubuntu-latest)"
+            echo ""
+            echo "### Post-check V1"
+            echo '```'
+            grep -E "test result:|test le_" post_check.log || echo "(pas de log)"
+            echo '```'
+            echo ""
+            echo "### make demo"
+            echo '```'
+            grep -E "^\[[0-9]+\]|verdict|INVARIANTS|EXÉCUTÉ|refusé" demo.log || echo "(pas de log)"
+            echo '```'
+            echo ""
+            echo "### make attack"
+            echo '```'
+            grep -E "pièges arrêtés|règle attendue|BLOCK|ALLOW|WARN" attack.log || echo "(pas de log)"
+            echo '```'
+            echo ""
+            echo "### make sim"
+            echo '```'
+            grep -E "précision|rappel|score F1|cas testés|attaques" sim.log || echo "(pas de log)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

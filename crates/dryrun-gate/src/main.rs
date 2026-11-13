@@ -157,6 +157,17 @@ fn run_bench(seed: u64) -> anyhow::Result<()> {
     dryrun_gate::bench::print_report(&report);
     dryrun_gate::bench::save_json(&report, std::path::Path::new("bench_matrix.json"))?;
     println!("Rapport sauvegardé dans bench_matrix.json");
+    dryrun_gate::summary::line(
+        "bench",
+        &[
+            ("cases", report.total.to_string()),
+            ("attacks", report.attacks.to_string()),
+            ("precision", format!("{:.1}", report.precision * 100.0)),
+            ("recall", format!("{:.1}", report.recall * 100.0)),
+            ("f1", format!("{:.4}", report.f1_score)),
+            ("seed", seed.to_string()),
+        ],
+    );
     Ok(())
 }
 

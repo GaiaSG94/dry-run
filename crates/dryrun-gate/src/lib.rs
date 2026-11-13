@@ -16,6 +16,7 @@ pub mod mcp;
 pub mod sim_real;
 pub mod sim_stub;
 pub mod sim_types;
+pub mod summary;
 pub mod testnet;
 
 pub use amount::Amount;
