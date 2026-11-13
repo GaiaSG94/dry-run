@@ -316,11 +316,7 @@ fn resolve_web_dir(requested: &str) -> std::path::PathBuf {
     if candidate.is_dir() {
         return candidate;
     }
-    for fallback in [
-        "web",
-        "../../web",
-        "../web",
-    ] {
+    for fallback in ["web", "../../web", "../web"] {
         let path = std::path::PathBuf::from(fallback);
         if path.is_dir() {
             return path;
