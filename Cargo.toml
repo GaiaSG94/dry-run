@@ -6,7 +6,7 @@ members = ["crates/*", "contracts/*"]
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.86"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 repository = "https://github.com/GaiaSG94/dry-run"
 
 [workspace.dependencies]

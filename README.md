@@ -1,122 +1,124 @@
-# Dry Run — Pare-feu à simulation pour wallets d'agents NEAR
+# Dry Run — a simulation firewall for NEAR agent wallets
 
-> **« Every transaction happens twice, the first time for nothing. »**
+> **"Every transaction happens twice, the first time for nothing."**
 >
-> Projet pour le hackathon NEAR — Ticket 06 `security` (« AI Security & Defense »).
-> Période : 10–14 novembre 2026 (premier commit le 10/11, soumission le 14/11 à 23:59 UTC).
-> Développé par **GaiaSG94** (@GaiaSG94).
-> Dépôt public : <https://github.com/GaiaSG94/dry-run>
+> NEAR HACKATHON project — track 06 `security` ("AI Security & Defense").
+> Built 10–14 November 2026 (first commit on 10/11, submission on 14/11 at 23:59 UTC).
+> Built by **GaiaSG94** (@GaiaSG94).
+> Repository: <https://github.com/GaiaSG94/dry-run>
+> Live demo (scripted, no install): <https://gaiasg94.github.io/dry-run/?lang=en>
 
 ---
 
-## 1. Pourquoi ce projet ?
+## 1. Why this project?
 
-Les pare-feux pour agents IA jugent **la demande** : ils regardent le destinataire et le montant annoncés et les comparent à des listes blanches et à des plafonds. Ce que le contrat appelé fera réellement des fonds n'est jamais examiné.
+Firewalls for AI agents judge **the request**: they look at the announced recipient and amount and compare them with allow-lists and caps. What the called contract will really do with the funds is never examined.
 
-Sur NEAR, ce modèle est particulièrement dangereux :
-- **NEAR n'a pas de simulation RPC native** : les appels `view` sont en lecture seule et ne suivent pas les appels inter-contrats.
-- **Un appel inter-contrat ne s'annule pas** : si le deuxième reçu échoue, le premier a déjà encaissé les fonds.
-- **L'« approbation illimitée » existe sous d'autres noms** : ajout d'une clé d'accès plein accès, approbation NFT (`nft_approve`), ou transfert avec appel (`ft_transfer_call`) vers un inconnu.
+On NEAR, that model is especially dangerous:
+- **NEAR has no native RPC simulation**: `view` calls are read-only and do not follow cross-contract calls.
+- **A cross-contract call cannot be rolled back**: if the second receipt fails, the first one has already taken the funds.
+- **"Unlimited approval" exists under other names**: adding a full-access key, an NFT approval (`nft_approve`), or a transfer-and-call (`ft_transfer_call`) to an unknown contract.
 
-**Dry Run résout cela par une vraie exécution locale avant toute signature** :
-1. La transaction est jouée dans un **bac à sable local** (`near-sandbox`) synchronisé avec l'état de la chaîne ;
-2. La simulation tourne **en tant que le coffre** (même nom de compte, mêmes soldes, même état) ;
-3. Le verdict vient des **effets réels** (soldes avant/après, clés ajoutées, approbations, reçus en échec, contrats touchés), pas du texte de l'agent ;
-4. Le coffre applique **on-chain** les plafonds glissants et le gel, quoi qu'il arrive au simulateur.
+**Dry Run solves this with a real local execution before any signature:**
+1. The transaction is played in a **local sandbox** (`near-sandbox`) synchronised with the chain state;
+2. The simulation runs **as the vault** (same account name, same balances, same state);
+3. The verdict comes from the **real effects** (balances before/after, added keys, approvals, failed receipts, contracts touched), not from the agent's text;
+4. The vault enforces rolling caps and the freeze **on-chain**, whatever happens to the simulator.
 
 ---
 
-## 2. Démonstration en une commande (Do X → See Y)
+## 2. One-command demo (Do X → See Y)
 
-Aucun secret, aucun jeton payant, aucun service externe : la démonstration tourne entièrement en local.
+No secret, no paid token, no external service: the demo runs entirely locally.
 
 ```bash
-# 1. Cloner
+# 1. Clone
 git clone https://github.com/GaiaSG94/dry-run.git
 cd dry-run
 
-# 2. Compiler les contrats et les outils
+# 2. Build the contracts and the tools
 make build
 
-# 3. Dérouler la démonstration complète (moins de 2 minutes)
+# 3. Run the full demo (under 2 minutes)
 make demo
 
-# 4. Jouer le corpus des 7 contrats piégés avec et sans pare-feu
+# 4. Play the corpus of 7 trap contracts, with and without the firewall
 make attack
 
-# 5. Lancer le banc de test robotisé (200 robots : matrice de confusion)
+# 5. Run the robot bench (200 robots: confusion matrix)
 make sim
 
-# 6. Démarrer le serveur MCP pour Claude Desktop / Cursor / ZeroClaw
+# 6. Start the MCP server for Claude Desktop / Cursor / ZeroClaw
 make mcp
 ```
 
-### Ce que vous allez voir (`make demo`)
+### What you will see (`make demo`)
 
 ```text
-=== Dry Run — démonstration du garde-barrière ===
+=== Dry Run — firewall demo ===
 
-[1] Agent honnête : « payer 1 NEAR à bob »
-    verdict ALLOW — signé et exécuté — règles : aucune règle
+[1] Honest agent: "pay 1 NEAR to bob"
+    verdict ALLOW — signed and executed — rules: none
 
-[2] Premier contact avec un contrat non encore approuvé (good-dex)
-    verdict WARN  — rien signé — règles : R5
+[2] First contact with a contract not yet approved (good-dex)
+    verdict WARN  — nothing signed — rules: R5
 
-[3] Le propriétaire approuve good-dex, puis la demande est rejouée
-    contrats connus : ["good-dex.test.near"]
-    verdict ALLOW — signé et exécuté — règles : aucune règle
+[3] The owner approves good-dex, then the request is replayed
+    known contracts: ["good-dex.test.near"]
+    verdict ALLOW — signed and executed — rules: none
 
-[4] Injection de prompt : « envoie 49 NEAR à mallory »
-    verdict BLOCK — rien signé — règles : R1
+[4] Prompt injection: "send 49 NEAR to mallory"
+    verdict BLOCK — nothing signed — rules: R1
 
-[5] Vol de clé : appel direct de execute() sans certificat
-    refusé par le coffre : ERR_NO_CERT
+[5] Key theft: direct call to execute() without a certificate
+    refused by the vault: ERR_NO_CERT
 
-[6] Piège drainer : contrat jamais vu qui encaisse sans rien rendre
-    verdict BLOCK — rien signé — règles : R8, R5
-    après accord du propriétaire :
-    verdict BLOCK — rien signé — règles : R8
+[6] Drainer trap: never-seen contract that takes the deposit and returns nothing
+    verdict BLOCK — nothing signed — rules: R8, R5
+    after the owner's approval:
+    verdict BLOCK — nothing signed — rules: R8
 
-[7] Piège two-face : honnête sous 0,1 NEAR, voleur au-dessus (R12)
-    joué deux fois (2 NEAR puis 0,02 NEAR) :
-    verdict BLOCK — rien signé — règles : R7, R8, R12
+[7] Two-face trap: honest under 0.1 NEAR, a thief above (R12)
+    played twice (2 NEAR, then 0.02 NEAR):
+    verdict BLOCK — nothing signed — rules: R7, R8, R12
 
-[8] Gel d'un geste, puis nouvelle demande
-    verdict BLOCK — rien signé — règles : GEL
+[8] One-tap freeze, then a new request
+    verdict BLOCK — nothing signed — rules: FREEZE
 
-[9] Vérification des invariants du coffre
-    I1 (plafond 24 h respecté) : OK
-    I2 (coffre gelé) : OK
-    I3 (contrats connus maîtrisés) : OK
-    I4 (simulateur réel branché) : OK
-    I5 (dépenses comptées sous plafond) : OK
-    I6 (certificat requis on-chain) : OK
-    I7 (frise complète) : OK
+[9] Vault invariants
+    I1 (24 h cap respected): OK
+    I2 (vault frozen): OK
+    I3 (known contracts under control): OK
+    I4 (real simulator wired): OK
+    I5 (spending counted under the cap): OK
+    I6 (certificate required on-chain): OK
+    I7 (complete timeline): OK
     INVARIANTS OK
 ```
 
-### Ce que vous allez voir (`make attack`)
+The CLI prints this in French; the MCP server and the web page also speak English (`--lang en`, `?lang=en`).
+
+### What you will see (`make attack`)
 
 ```text
-=== Dry Run — corpus d'attaques ===
+=== Dry Run — attack corpus ===
 
-  contrat        verdict    règles                       ce que perd un wallet nu
+  contract       verdict    rules                        what a bare wallet loses
   ----------------------------------------------------------------------------------------------
-  drainer        BLOCK      R8                           2 NEAR encaissés, rien reçu
-  skimmer        BLOCK      R7, R12                      20 % des jetons détournés vers un tiers
-  half-step      BLOCK      R9                           fonds pris, puis reçu en échec
-  liar           BLOCK      R8                           « succès » annoncé, aucun jeton reçu
-  approver       BLOCK      R3                           NFT du coffre approuvé à un tiers
-  shapeshifter   BLOCK      R6                           code remplacé après l'accord
-  two-face       BLOCK      R7, R8, R12                  honnête sous 0,1 NEAR, voleur au-dessus
+  drainer        BLOCK      R8                           2 NEAR taken, nothing received
+  skimmer        BLOCK      R7, R12                      20 % of the tokens diverted to a third party
+  half-step      BLOCK      R9                           funds taken, then a failed receipt
+  liar           BLOCK      R8                           "success" announced, no token received
+  approver       BLOCK      R3                           the vault's NFT approved to a third party
+  shapeshifter   BLOCK      R6                           code replaced after the approval
+  two-face       BLOCK      R7, R8, R12                  honest under 0.1 NEAR, a thief above
 
-  7/7 pièges arrêtés avant signature.
-  7/7 fois la règle attendue a mordu.
+  7/7 traps stopped before signing.
+  7/7 times the expected rule fired.
 ```
 
-Chaque piège est joué **après** approbation du contrat par le propriétaire : c'est le
-scénario le plus défavorable au pare-feu. La règle qui morde est celle qui décrit
-l'effet observé, pas la liste blanche.
+Each trap is played **after** the owner has approved the contract: the worst case for the
+firewall. The rule that fires is the one that describes the observed effect, not the allow-list.
 
 ---
 
@@ -124,491 +126,481 @@ l'effet observé, pas la liste blanche.
 
 ```text
                 +-------------------------------------------------------+
-                |                    Agent IA                           |
+                |                       AI agent                        |
                 +-------------------------------------------------------+
                                            | propose(action, intent)
                                            v
 +------------------------------------------------------------------------------------+
-|                                  Garde-barrière                                    |
-|   (ne détient QUE la clé FunctionCall::execute, ne peut ni changer ni dégeler)     |
+|                                     Gatekeeper                                     |
+|   (holds ONLY the FunctionCall::execute key, can neither change nor unfreeze)      |
 +------------------------------------------------------------------------------------+
        |                                                         |
-       | 1. simule                                               | 3. si ALLOW : signe
+       | 1. simulate                                             | 3. if ALLOW: sign
        v                                                         v
 +-----------------------------+                           +--------------------------+
-|      Simulateur local       |                           |      Chaîne NEAR         |
-|  (near-sandbox clone d'état)|                           |                          |
-|                             |                           |   Contrat Vault          |
-|  - joue en tant que vault   |                           |   - plafonds on-chain    |
-|  - extrait Effects          |                           |   - registre known       |
-|  - applique R1 à R11        |                           |   - gel étanche          |
-|  - rend Decision            |                           |   - rappel on_done       |
+|       Local simulator       |                           |        NEAR chain        |
+| (near-sandbox state clone)  |                           |                          |
+|                             |                           |   Vault contract         |
+|  - plays as the vault       |                           |   - on-chain caps        |
+|  - extracts Effects         |                           |   - known registry       |
+|  - applies R1 to R11        |                           |   - watertight freeze    |
+|  - returns a Decision       |                           |   - on_done callback     |
 +-----------------------------+                           +--------------------------+
        |                                                                 ^
-       +---- 2. si BLOCK : refuse, affiche la carte                      |
-       +---- 2. si WARN  : demande au propriétaire (approve_contract) ---+
+       +---- 2. if BLOCK: refuse, show the effects card                  |
+       +---- 2. if WARN:  ask the owner (approve_contract) --------------+
 ```
 
-### La carte des effets (ce que le propriétaire et le jury voient)
+### The effects card (what the owner and the judges see)
 
 ```text
  PAY 2 NEAR for ≥ 1.9 TEST on good-dex.test.near                  ALLOW
- soldes
+ balances
    vault.test.near                          -2.000000 NEAR
    good-dex.test.near                       +2.000000 NEAR
    vault.test.near                          +1.960000 TEST
- clés, approbations
+ keys, approvals
    none
- reçus
-   3, 0 échec(s)
- règles
-   aucune
- simulé au bloc 42 — gas 12 Tgas — aucun reçu en échec
+ receipts
+   3, 0 failed
+ rules
+   none
+ simulated at block 42 — gas 12 Tgas — no failed receipt
 ```
 
-Face à un contrat piégé (`skimmer`) :
+Facing a trap contract (`skimmer`):
 
 ```text
  PAY 2 NEAR for ≥ 1.9 TEST on skimmer.test.near                   BLOCK
- soldes
+ balances
    vault.test.near                          -2.000000 NEAR
    vault.test.near                          +1.560000 TEST
    mallory.test.near                        +0.400000 TEST
- clés, approbations
+ keys, approvals
    none
- reçus
-   4, 0 échec(s)
- règles
-   R7 bénéficiaire non déclaré — mallory.test.near a reçu 0.4 TEST sans être nommé
-   R8 moins reçu que promis    — reçu 1.56 TEST alors que l'intention demandait ≥ 1.9
- simulé au bloc 43 — gas 18 Tgas — aucun reçu en échec
+ receipts
+   4, 0 failed
+ rules
+   R7 undeclared beneficiary  — mallory.test.near received 0.4 TEST without being named
+   R8 less received than promised — received 1.56 TEST while the intent required ≥ 1.9
+ simulated at block 43 — gas 18 Tgas — no failed receipt
 ```
 
 ---
 
-## 4. Les 12 règles du pare-feu
+## 4. The firewall's 12 rules
 
-| N° | Règle | Verdict | Ce qu'elle arrête |
+| # | Rule | Verdict | What it stops |
 |---|---|---|---|
-| **R1** | Sortie > plafond transaction ou > reste 24 h | `BLOCK` | Injections « vide le wallet », dérives cumulées |
-| **R2** | Clé d'accès ajoutée sur le compte du coffre | `BLOCK` | Prise de contrôle furtive |
-| **R3** | Approbation NFT (`nft_approve`) vers un tiers non déclaré | `BLOCK` | Vol de NFT par procuration |
-| **R4** | `ft_transfer_call` vers un contrat inconnu | `BLOCK` | Transfert avec exécution incontrôlée |
-| **R5** | Premier contact avec un contrat | `WARN` | Interaction non approuvée par le propriétaire |
-| **R6** | Empreinte du code changée depuis l'accord | `BLOCK` | Contrat transformé après coup (`shapeshifter`) |
-| **R7** | Bénéficiaire non déclaré dans l'intention | `BLOCK` | Rétro-commissions cachées (`skimmer`) |
-| **R8** | Moins reçu que le minimum promis, ou rien | `BLOCK` | Drainers, mensonges (`liar`, `drainer`) |
-| **R9** | Reçu en échec après sortie de fonds (`stranded`) | `BLOCK` | Contrats à mi-chemin (`half-step`) |
-| **R10** | Gas ou dépôt de stockage anormalement élevé | `WARN` | Gas bombs, storage hogs |
-| **R11** | Plus de 8 comptes touchés | `BLOCK` | Transactions trop complexes pour être certifiées |
-| **R12** | Divergence différentielle montant réel vs réduit (V1) | `BLOCK` | Contrats à double visage, évasion de bac à sable |
+| **R1** | Output > per-transaction cap or > remaining 24 h cap | `BLOCK` | "Empty the wallet" injections, cumulative drift |
+| **R2** | Access key added on the vault account | `BLOCK` | Stealth takeover |
+| **R3** | NFT approval (`nft_approve`) to an undeclared third party | `BLOCK` | NFT theft by proxy |
+| **R4** | `ft_transfer_call` to an unknown contract | `BLOCK` | Transfer with uncontrolled execution |
+| **R5** | First contact with a contract | `WARN` | Interaction not approved by the owner |
+| **R6** | Code hash changed since the approval | `BLOCK` | Contract transformed afterwards (`shapeshifter`) |
+| **R7** | Beneficiary not declared in the intent | `BLOCK` | Hidden kickbacks (`skimmer`) |
+| **R8** | Less received than the promised minimum, or nothing | `BLOCK` | Drainers, lies (`liar`, `drainer`) |
+| **R9** | Failed receipt after funds left (`stranded`) | `BLOCK` | Half-way contracts (`half-step`) |
+| **R10** | Abnormally high gas or storage deposit | `WARN` | Gas bombs, storage hogs |
+| **R11** | More than 8 accounts touched | `BLOCK` | Transactions too complex to be certified |
+| **R12** | Differential divergence, real vs reduced amount (V1) | `BLOCK` | Two-faced contracts, sandbox evasion |
 
 ---
 
-## 5. Le corpus de contrats piégés (`make attack`)
+## 5. The corpus of trap contracts (`make attack`)
 
-Chaque contrat est joué deux fois : d'abord contre un wallet sans pare-feu (témoin), puis à travers Dry Run.
+Each contract is played twice: first against a wallet without a firewall (control), then through Dry Run.
 
-| Contrat | Ce qu'il fait | Sans pare-feu (nu) | À travers Dry Run | Règle |
+| Contract | What it does | Without firewall (bare) | Through Dry Run | Rule |
 |---|---|---|---|---|
-| `drainer` | Encaisse le dépôt, ne rend rien | −2 NEAR perdus | **Refusé** avant signature | `R8` |
-| `skimmer` | Détourne 20 % des jetons vers un tiers | 0.4 TEST volé | **Refusé** avant signature | `R7` |
-| `half-step` | Encaisse puis fait échouer le reçu suivant | Fonds coincés | **Refusé** avant signature | `R9` |
-| `liar` | Répond « succès » sans rien transférer | −2 NEAR pour rien | **Refusé** avant signature | `R8` |
-| `approver` | Tente de faire approuver un NFT au passage | NFT exposé | **Refusé** avant signature | `R3` |
-| `shapeshifter` | Remplacement du code après accord | Contrat altéré | **Refusé** avant signature | `R6` |
-| `two-face` | Honnête sous 0,1 NEAR, voleur au-dessus | 95 % des jetons détournés | **Refusé** avant signature | `R12` |
-| Vol de clé (niveau V1) | Appel direct du coffre avec la clé d'agent volée | N/A | **Rejeté on-chain** : `ERR_NO_CERT` | On-chain |
+| `drainer` | Takes the deposit, returns nothing | −2 NEAR lost | **Refused** before signing | `R8` |
+| `skimmer` | Diverts 20 % of the tokens to a third party | 0.4 TEST stolen | **Refused** before signing | `R7` |
+| `half-step` | Takes the funds, then fails the next receipt | Funds stuck | **Refused** before signing | `R9` |
+| `liar` | Answers "success" without transferring anything | −2 NEAR for nothing | **Refused** before signing | `R8` |
+| `approver` | Tries to get an NFT approved on the way | NFT exposed | **Refused** before signing | `R3` |
+| `shapeshifter` | Code replaced after the approval | Contract altered | **Refused** before signing | `R6` |
+| `two-face` | Honest under 0.1 NEAR, a thief above | 95 % of the tokens diverted | **Refused** before signing | `R12` |
+| Key theft (V1 level) | Direct call to the vault with the stolen agent key | N/A | **Rejected on-chain**: `ERR_NO_CERT` | On-chain |
 
-**Résultat mesuré** : 7/7 pièges arrêtés avant signature, 7/7 fois la règle attendue a mordu.
+**Measured result**: 7/7 traps stopped before signing, 7/7 times the expected rule fired.
 
-> **Note V1 — contrôle au retour activé.** La chaîne de promesses
-> `appel → on_done → lecture du solde → on_post_check` tourne maintenant dans le budget de
-> gas d'un appel d'agent (300 TGas attachés, 100 TGas pour l'appel visé, 10 TGas par rappel) :
-> si le solde promis par le certificat n'est pas atteint au retour, le coffre **gèle** et marque
-> le contrat **hostile** (`ERR_HOSTILE` pour tout appel ultérieur). Prouvé par le test
-> d'intégration `crates/dryrun-sim/tests/v1_post_check.rs` (bac à sable réel).
+> **V1 note — post-check enabled.** The promise chain
+> `call → on_done → balance read → on_post_check` now fits in the gas budget of an agent
+> call (300 TGas attached, 100 TGas for the target call, 10 TGas per callback): if the balance
+> promised by the certificate is not reached on return, the vault **freezes** and marks the
+> contract **hostile** (`ERR_HOSTILE` for any later call). Proven by the integration test
+> `crates/dryrun-sim/tests/v1_post_check.rs` (real sandbox).
 
 ---
 
-## 5 bis. Le niveau V1 : le certificat de simulation vérifié on-chain
+## 5 bis. Level V1: the simulation certificate, verified on-chain
 
-C'est la nouveauté qui distingue Dry Run des dizaines d'autres dépôts du ticket :
+This is what sets Dry Run apart:
 
-> Le coffre **n'exécute plus rien** qui ne soit accompagné d'un certificat cryptographique
-> signé par la clé du simulateur.
+> The vault **executes nothing** that is not accompanied by a cryptographic certificate
+> signed by the simulator's key.
 
 ```text
 Cert {
-  call_digest  : SHA-256 de la forme canonique de la demande
-  snapshot_height, expires_height : fraîcheur (20 blocs)
-  max_out      : sortie maximale autorisée
-  post         : (jeton, minimum) promis en retour
-  nonce        : à usage unique
+  call_digest  : SHA-256 of the canonical form of the request
+  snapshot_height, expires_height : freshness (20 blocks)
+  max_out      : maximum output allowed
+  post         : (token, minimum) promised in return
+  nonce        : single use
 }
-signature = Ed25519(clé du simulateur, Cert)
+signature = Ed25519(simulator key, Cert)
 ```
 
-Vérifications faites **par le contrat, on-chain**, avant toute sortie :
+Checks made **by the contract, on-chain**, before any output:
 
-| Vérification | Code de refus |
+| Check | Refusal code |
 |---|---|
-| Certificat présent | `ERR_NO_CERT` |
-| Nonce jamais utilisé | `ERR_CERT_USED` |
-| Certificat encore frais | `ERR_CERT_STALE` |
-| Le condensé correspond à la demande reçue | `ERR_CERT_MISMATCH` |
-| La sortie ne dépasse pas le plafond certifié | `ERR_OVER_TX_CAP` |
-| Signature Ed25519 valide pour la clé déposée | `ERR_BAD_SIGNATURE` |
-| Le contrat appelé n'est pas marqué hostile | `ERR_HOSTILE` |
+| Certificate present | `ERR_NO_CERT` |
+| Nonce never used | `ERR_CERT_USED` |
+| Certificate still fresh | `ERR_CERT_STALE` |
+| The digest matches the received request | `ERR_CERT_MISMATCH` |
+| The output does not exceed the certified cap | `ERR_OVER_TX_CAP` |
+| Valid Ed25519 signature for the registered key | `ERR_BAD_SIGNATURE` |
+| The called contract is not marked hostile | `ERR_HOSTILE` |
 
-**Conséquence directe** : voler la clé de l'agent ne suffit plus. Il faut aussi la clé du
-simulateur, qui ne signe **aucune** transaction et ne peut donc rien dépenser seule.
+**Direct consequence**: stealing the agent's key is no longer enough. The attacker would also
+need the simulator's key, which signs **no** transaction and therefore cannot spend anything alone.
 
 ```text
 $ cargo run --release -p dryrun-gate -- demo
-[5] Vol de clé : appel direct de execute() sans certificat
-    refusé par le coffre : ERR_NO_CERT
+[5] Key theft: direct call to execute() without a certificate
+    refused by the vault: ERR_NO_CERT
 ```
 
-La clé publique du simulateur est déposée sur le coffre par le propriétaire
-(`set_sim_key`, 1 yoctoNEAR), comme toute action d'administration du coffre.
+The simulator's public key is registered on the vault by the owner (`set_sim_key`,
+1 yoctoNEAR), like any administrative action on the vault.
 
 ---
 
-## 5 ter. Les deux défenses qui suivent la transaction
+## 5 ter. The two defences that follow the transaction
 
-### Le contrôle au retour (`on_post_check`)
+### The post-check (`on_post_check`)
 
-Le certificat ne se contente pas d'autoriser la sortie : il **promet un résultat**.
-`post = (jeton, solde minimum attendu après l'appel)` est signé par le simulateur, puis
-vérifié **on-chain, après** l'exécution :
+The certificate does not only authorise the output: it **promises a result**.
+`post = (token, minimum balance expected after the call)` is signed by the simulator, then
+checked **on-chain, after** the execution:
 
 ```text
-appel visé → on_done (solde la dépense si le reçu a échoué)
-           → ft_balance_of(jeton)         lecture du solde réel
-           → on_post_check                solde < minimum promis ?
-                                            ├─ gel immédiat du coffre
-                                            └─ contrat marqué HOSTILE (événement NEP-297)
+target call → on_done (refunds the spend if the receipt failed)
+            → ft_balance_of(token)        reads the real balance
+            → on_post_check               balance < promised minimum?
+                                            ├─ the vault freezes immediately
+                                            └─ the contract is marked HOSTILE (NEP-297 event)
 ```
 
-C'est la réponse aux contrats **dormeurs** : un contrat qui se tient bien en simulation et
-vole à l'exécution est neutralisé au retour, et il ne peut plus jamais être rappelé
-(`ERR_HOSTILE`). Toute la chaîne tient dans le budget d'un appel d'agent : 300 TGas
-attachés, 100 TGas pour l'appel visé, 10 TGas par rappel.
+This answers **sleeper** contracts: a contract that behaves in simulation and steals at
+execution is neutralised on return, and can never be called again (`ERR_HOSTILE`). The whole
+chain fits in the budget of an agent call: 300 TGas attached, 100 TGas for the target call,
+10 TGas per callback.
 
 ```text
 $ cargo test -p dryrun-sim --test v1_post_check
 test le_contrôle_au_retour_gele_et_marque_hostile ... ok
 ```
 
-### La simulation différentielle (R12)
+### The differential simulation (R12)
 
-Chaque appel de contrat avec dépôt est joué **deux fois** : au montant réel, puis au
-centième. Les deux rejeux partent chacun d'un bac à sable jetable et tournent **en
-parallèle** (`tokio::join!`) : la latence ne double pas.
+Every contract call with a deposit is played **twice**: at the real amount, then at one
+hundredth. Each replay starts from a throwaway sandbox and both run **in parallel**
+(`tokio::join!`): latency does not double.
 
-Le test est **orienté** : R12 mord quand le petit montant est proportionnellement
-**mieux** traité que le montant réel — la signature d'un contrat qui se tient bien tant
-qu'il est observé. Les quantités reçues sont comparées entre elles (jamais divisées par le
-dépôt en yoctoNEAR) : le résultat ne dépend ni des décimales du jeton, ni des frais de gaz.
+The test is **directional**: R12 fires when the small amount is proportionally **better**
+treated than the real amount — the signature of a contract that behaves while it is watched.
+Received quantities are compared with each other (never divided by the deposit in yoctoNEAR):
+the result depends neither on the token's decimals nor on gas fees.
 
 ```text
 $ cargo run --release -p dryrun-gate -- demo
-[7] Piège two-face : honnête sous 0,1 NEAR, voleur au-dessus (R12)
-    joué deux fois (2 NEAR puis 0,02 NEAR) :
-    verdict BLOCK — rien signé — règles : R7, R8, R12
+[7] Two-face trap: honest under 0.1 NEAR, a thief above (R12)
+    played twice (2 NEAR, then 0.02 NEAR):
+    verdict BLOCK — nothing signed — rules: R7, R8, R12
 ```
 
-`two-face` rend 95 % du montant converti sur 0,02 NEAR et 5 % seulement sur 2 NEAR :
-écart mesuré de 947 ‰, très au-dessus du seuil de 100 ‰.
+`two-face` returns 95 % of the converted amount on 0.02 NEAR and only 5 % on 2 NEAR:
+a measured gap of 947 ‰, far above the 100 ‰ threshold.
 
 ---
 
-## 6. Rôle précis de NEAR Protocol
+## 6. The precise role of NEAR Protocol
 
-Dry Run s'appuie sur trois primitives fondamentales de NEAR :
-1. **Les clés d'accès limitées par fonction (`FunctionCallAccessKey`)** : permettent de donner à l'agent et au simulateur le droit d'appeler `execute`, au gardien le droit d'appeler `freeze`, tout en retirant toute clé `FullAccess` du compte du coffre après installation.
-2. **Le bac à sable officiel (`near-sandbox`)** : permet de synchroniser l'état réel de la chaîne via `patch_state` et d'exécuter la transaction en local sous la véritable identité du coffre (`with_default_access_key`).
-3. **Le modèle asynchrone à reçus (`Promise`)** : justifie la nécessité de la simulation préalable, car les appels inter-contrats ne peuvent pas être annulés de manière transactionnelle sur NEAR.
+Dry Run relies on three fundamental NEAR primitives:
+1. **Function-call access keys (`FunctionCallAccessKey`)**: they give the agent and the simulator the right to call `execute`, and the guardian the right to call `freeze`, while every `FullAccess` key is removed from the vault account after setup.
+2. **The official sandbox (`near-sandbox`)**: it synchronises the real chain state through `patch_state` and executes the transaction locally under the vault's real identity (`with_default_access_key`).
+3. **The asynchronous receipt model (`Promise`)**: it is why simulation must come first — cross-contract calls cannot be rolled back transactionally on NEAR.
 
 ---
 
-## 6 bis. Le coffre déployé sur NEAR Testnet
+## 6 bis. The vault deployed on NEAR testnet
 
-Le contrat `vault` tourne sur le testnet public, sur le compte
+The `vault` contract runs on the public testnet, on the account
 **[`dryrun-vault-1112.testnet`](https://testnet.nearblocks.io/address/dryrun-vault-1112.testnet)**
-(déployé le 2026-11-12, plafonds de 2 NEAR par transaction et de 10 NEAR sur 24 h).
+(deployed on 2026-11-12, caps of 2 NEAR per transaction and 10 NEAR per 24 h).
 
-| Étape | Résultat sur la chaîne | Transaction |
+| Step | Result on-chain | Transaction |
 |---|---|---|
-| Déploiement du code | contrat installé | [`D6QiwMAK…`](https://explorer.testnet.near.org/transactions/D6QiwMAKBLsvyCEN7hb8Em4fJ1qnZLV9p4nsjHKA7qjV) |
+| Code deployment | contract installed | [`D6QiwMAK…`](https://explorer.testnet.near.org/transactions/D6QiwMAKBLsvyCEN7hb8Em4fJ1qnZLV9p4nsjHKA7qjV) |
 | `new` (initialisation) | owner, `tx_cap` 2 NEAR, `daily_cap` 10 NEAR | [`7JDQgzM8…`](https://explorer.testnet.near.org/transactions/7JDQgzM8TKYCYgL4awiZzKtKEdZeYb5UBk9SFHEMu9Ed) |
-| `execute` : 5 NEAR vers `testnet` | **refusé** : `ERR_OVER_TX_CAP`, rien ne sort | [`3YDpi4y9…`](https://explorer.testnet.near.org/transactions/3YDpi4y9tTBJDBmu5VFCn1zFRPc1K3hBz3MHqQrqnjmB) |
-| `execute` : 0,1 NEAR vers `testnet` | **exécuté**, `spent_24h` = 0,1 NEAR | [`HdZr1wuS…`](https://explorer.testnet.near.org/transactions/HdZr1wuSSQSJQ3jcsHhqjzuEgP1opAfv6tdMdFTupck6) |
+| `execute`: 5 NEAR to `testnet` | **refused**: `ERR_OVER_TX_CAP`, nothing leaves | [`3YDpi4y9…`](https://explorer.testnet.near.org/transactions/3YDpi4y9tTBJDBmu5VFCn1zFRPc1K3hBz3MHqQrqnjmB) |
+| `execute`: 0.1 NEAR to `testnet` | **executed**, `spent_24h` = 0.1 NEAR | [`HdZr1wuS…`](https://explorer.testnet.near.org/transactions/HdZr1wuSSQSJQ3jcsHhqjzuEgP1opAfv6tdMdFTupck6) |
 
-Pour relire l'état :
+To read the state:
 
 ```bash
 near contract call-function as-read-only dryrun-vault-1112.testnet status json-args '{}' network-config testnet now
 ```
 
-### 6 ter. Le pare-feu branché sur le coffre testnet
+### 6 ter. The firewall wired to the testnet vault
 
-`dryrun-gate` a un **mode testnet** : il ne juge plus sur un coffre en mémoire,
-mais sur le coffre `vault` réellement déployé ci-dessus.
+`dryrun-gate` has a **testnet mode**: it no longer judges against an in-memory vault, but
+against the `vault` actually deployed above.
 
 ```bash
-# Le serveur MCP, branché sur la chaîne (l'agent signe pour de vrai)
+# The MCP server, wired to the chain (the agent really signs)
 dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet --lang en
 
-# La page web et son API, branchés sur la chaîne
+# The web page and its API, wired to the chain
 dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
 
-# rpc.testnet.near.org est déprécié et limite le débit (erreurs 429) : choisir un autre fournisseur
+# rpc.testnet.near.org is deprecated and rate-limited (429 errors): pick another provider
 DRYRUN_RPC_URL=https://rpc.testnet.fastnear.com dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
 ```
 
-Ce que le mode change, et rien d'autre :
+What the mode changes, and nothing else:
 
-| | Mode local (défaut) | Mode `--network testnet` |
+| | Local mode (default) | `--network testnet` mode |
 |---|---|---|
-| État du coffre | en mémoire ou bac à sable local | `status()` lu **par RPC** (`https://rpc.testnet.near.org` par défaut, ou `DRYRUN_RPC_URL`) |
-| Verdict | mêmes règles R1 à R12 | mêmes règles R1 à R12, **jugées contre les plafonds réels** de la chaîne |
-| Verdict `ALLOW` | signé et exécuté en local | `execute(action, cert: null)` envoyé **sur la chaîne**, signé par la clé du compte |
-| Verdict `BLOCK` / `WARN` | rien n'est signé | rien n'est envoyé |
-| Réponse | « exécuté sur le coffre local (simulation) » | « sur NEAR testnet · tx `<empreinte>` » |
+| Vault state | in memory or local sandbox | `status()` read **over RPC** (`https://rpc.testnet.near.org` by default, or `DRYRUN_RPC_URL`) |
+| Verdict | same rules R1 to R12 | same rules R1 to R12, **judged against the chain's real caps** |
+| `ALLOW` verdict | signed and executed locally | `execute(action, cert: null)` sent **on-chain**, signed by the account key |
+| `BLOCK` / `WARN` verdict | nothing is signed | nothing is sent |
+| Response | "executed on the local vault (simulation)" | "on NEAR testnet · tx `<hash>`" |
 
-Les plafonds lus sur la chaîne sont ceux du coffre déployé : 2 NEAR par
-transaction, 10 NEAR sur 24 h. Une demande de 49 NEAR est donc bloquée par
-**R1** avant toute signature, exactement comme en local.
+The caps read on-chain are those of the deployed vault: 2 NEAR per transaction, 10 NEAR per
+24 h. A 49 NEAR request is therefore blocked by **R1** before any signature, exactly as locally.
 
-**La clé n'est jamais lue par Dry Run.** Elle reste dans le trousseau du
-système ; Dry Run appelle la CLI NEAR (`near-cli-rs`) qui la récupère elle-même
-(`sign-with-keychain`). Le binaire est cherché dans le `PATH`, ou pointé par la
-variable d'environnement `NEAR_CLI_BIN`.
+**Dry Run never reads the key.** It stays in the system keychain; Dry Run calls the NEAR CLI
+(`near-cli-rs`), which fetches it itself (`sign-with-keychain`). The binary is looked up in the
+`PATH`, or pointed to by the `NEAR_CLI_BIN` environment variable.
 
-### 6 quater. Vérifié en vrai, sur la chaîne
+### 6 quater. Verified for real, on-chain
 
-Session JSON-RPC réelle contre le coffre testnet, le 2026-11-13 :
+A real JSON-RPC session against the testnet vault, on 2026-11-13:
 
-| Demande (client MCP) | Verdict | Ce qui s'est passé |
+| Request (MCP client) | Verdict | What happened |
 |---|---|---|
-| 49 NEAR vers `mallory.test.near` | **BLOCK** (R1) | rien n'a été signé, aucune transaction |
-| 0,1 NEAR vers `testnet` | **ALLOW** | transaction signée et exécutée : [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa) |
+| 49 NEAR to `mallory.test.near` | **BLOCK** (R1) | nothing signed, no transaction |
+| 0.1 NEAR to `testnet` | **ALLOW** | transaction signed and executed: [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa) |
 
-Après la transaction, `status()` sur la chaîne confirme la dépense :
-`spent_24h` est passé de 0,1 à 0,2 NEAR. La transaction elle-même porte
-l'appel `execute` avec `cert: null` — le certificat V1 n'est pas exigé, ce
-déploiement n'ayant aucune `sim_key` enregistrée.
+After the transaction, `status()` on-chain confirms the spend: `spent_24h` went from 0.1 to
+0.2 NEAR. The transaction itself carries the `execute` call with `cert: null` — the V1
+certificate is not required, since this deployment has no registered `sim_key`.
 
-**Ce que ça prouve :** le pare-feu protège un portefeuille **réellement
-déployé**. Le verdict sort d'un état lu sur la chaîne, la signature est celle
-de la clé du compte, et la sortie porte une empreinte de transaction
-cliquable.
+**What this proves:** the firewall protects a **really deployed** wallet. The verdict comes
+from a state read on-chain, the signature is the account key's, and the output carries a
+clickable transaction hash.
 
-**Ce que ça ne prouve pas :**
-- Les effets d'un **appel de contrat** ne sont pas rejoués hors chaîne : un
-  appel vers un contrat inconnu est traité comme un premier contact (R5,
-  `WARN`) et n'est donc pas envoyé sans confirmation du propriétaire. Un
-  transfert, lui, est déterministe : il est jugé exactement.
-- Le gel d'urgence est **refusé** sur le coffre testnet (`DRYRUN_ALLOW_TESTNET_FREEZE=1`
-  pour le forcer) : un gel réel dure au moins une heure et casserait la
-  démonstration pour le reste de la journée.
-- Pour la démonstration, le coffre est son propre `owner` et garde sa clé
-  `FullAccess`. En production, on retire cette clé et on donne à l'agent une clé
-  limitée à `execute` (section 6, point 1).
-- Aucune `sim_key` n'est enregistrée : le certificat V1 n'est pas exigé sur ce
-  déploiement.
+**What this does not prove:**
+- The effects of a **contract call** are not replayed off-chain: a call to an unknown
+  contract is treated as a first contact (R5, `WARN`) and is therefore not sent without the
+  owner's confirmation. A transfer, however, is deterministic: it is judged exactly.
+- The emergency freeze is **refused** on the testnet vault (`DRYRUN_ALLOW_TESTNET_FREEZE=1`
+  forces it): a real freeze lasts at least one hour and would break the demo for the rest of
+  the day.
+- For the demo, the vault is its own `owner` and keeps its `FullAccess` key. In production,
+  that key is removed and the agent gets a key limited to `execute` (section 6, point 1).
+- No `sim_key` is registered: the V1 certificate is not required on this deployment.
 
 ---
 
-## 7. Structure du dépôt
+## 7. Repository layout
 
 ```text
 dry-run/
-├── Cargo.toml                       # Workspace Rust
+├── Cargo.toml                       # Rust workspace
 ├── Makefile                         # make build, make demo, make attack, make sim, make mcp
 ├── crates/
-│   ├── dryrun-core/                 # Types partagés, moteur de règles (R1-R12), certificat, carte des effets
-│   ├── dryrun-sim/                  # Simulateur (near-sandbox, capture d'effets, certificat Ed25519, simulation différentielle)
-│   └── dryrun-gate/                 # Garde-barrière (CLI, serveur HTTP, MCP, banc de test 200 robots)
+│   ├── dryrun-core/                 # Shared types, rule engine (R1-R12), certificate, effects card
+│   ├── dryrun-sim/                  # Simulator (near-sandbox, effect capture, Ed25519 certificate, differential simulation)
+│   └── dryrun-gate/                 # Gatekeeper (CLI, HTTP server, MCP, testnet mode, 200-robot bench)
 ├── contracts/
-│   ├── vault/                       # Le coffre (plafonds glissants, known, gel, certificat V1, marquage hostile)
-│   ├── good-dex/                    # DEX honnête de référence
-│   ├── test-token/                  # Jeton NEP-141 minimal (TEST)
-│   ├── test-nft/                    # NFT NEP-171 minimal
-│   ├── trap-drainer/                # Piège 1 : encaisse sans contrepartie
-│   ├── trap-skimmer/                # Piège 2 : rétro-commission vers tiers
-│   ├── trap-half-step/              # Piège 3 : échec après encaissement
-│   ├── trap-liar/                   # Piège 4 : promet sans transférer
-│   ├── trap-approver/               # Piège 5 : tentative d'approbation NFT
-│   ├── trap-shapeshifter/           # Piège 6 : altération de code
-│   └── trap-two-face/               # Piège 7 : honnête sous un seuil, voleur au-dessus (R12)
-├── web/                             # Interface graphique locale (scène 3D, terminal live, menu scénario, bouton de gel)
-├── scripts/                         # Scripts de déploiement testnet et d'enregistrement vidéo
+│   ├── vault/                       # The vault (rolling caps, known, freeze, V1 certificate, hostile marking)
+│   ├── good-dex/                    # Honest reference DEX
+│   ├── test-token/                  # Minimal NEP-141 token (TEST)
+│   ├── test-nft/                    # Minimal NEP-171 NFT
+│   ├── trap-drainer/                # Trap 1: takes without giving back
+│   ├── trap-skimmer/                # Trap 2: kickback to a third party
+│   ├── trap-half-step/              # Trap 3: fails after taking the funds
+│   ├── trap-liar/                   # Trap 4: promises without transferring
+│   ├── trap-approver/               # Trap 5: NFT approval attempt
+│   ├── trap-shapeshifter/           # Trap 6: code alteration
+│   └── trap-two-face/               # Trap 7: honest under a threshold, a thief above (R12)
+├── web/                             # Local web interface (3D scene, live terminal, request buttons, freeze)
+├── scripts/                         # Testnet deployment and video recording scripts
 └── docs/
-    ├── SPEC.md                      # Spécification d'interface (Niveau M)
-    └── SPEC_V1_MAX.md               # Spécification V1 (Certificat, marquage hostile, simulation différentielle) et MAX
+    ├── SPEC.md                      # Interface specification (level M)
+    └── SPEC_V1_MAX.md               # V1 specification (certificate, hostile marking, differential simulation) and MAX
 ```
 
 ---
 
-## 8. Interface Web & Serveur HTTP
+## 8. Web interface & HTTP server
 
-Le serveur web tourne en local et écoute sur toutes les interfaces (`0.0.0.0:8787`).
-
-- **Depuis cette machine** : [http://localhost:8787](http://localhost:8787)
-- **Depuis le réseau tailnet** : [http://100.124.18.48:8787/](http://100.124.18.48:8787/)
-
-Pour relancer le serveur :
+The web server runs locally on port 8787 and serves the page and its JSON API.
 
 ```bash
 cargo run --release -p dryrun-gate -- serve --port 8787
-# ou simplement :
+# or simply:
 ./run-server.sh
 ```
 
-### 8.1 La scène 3D « Le Reflet » (page d'accueil)
+Then open <http://localhost:8787/?lang=en>. Without a server, the same page runs as a scripted
+demo — that is the live demo on GitHub Pages: <https://gaiasg94.github.io/dry-run/?lang=en>.
 
-Une surface de verre coupe l'espace : **au-dessus, NEAR (le réel) ; en dessous,
-son reflet (le bac à sable)**. Chaque demande se joue d'abord dans le reflet ; si
-elle passe, le même geste se rejoue au-dessus, en miroir : **sand == réel**.
+### 8.1 The 3D scene
 
-- un **terminal live à droite** dit tout ce qui se passe, clairement et
-  concisément (chaque étape, chaque effet, chaque verdict, les appels réseau
-  réels en mode LIVE) ;
-- un seul bouton **« scénario »** ouvre un **menu déroulant** : on choisit la
-  menace à jouer (ou le film complet) ;
-- en bas, une **étiquette blanche à écriture verte** raconte l'événement en
-  cours, à côté de l'**étiquette des technologies** utilisées (NEAR, Rust,
-  Ed25519, MCP).
+One page, one scene: the whole path of a request on a 3D board — **① AI agent → ② firewall →
+③ sandbox (the copy of the chain) → ④ the 12 rules → ⑤ verdict → ⑥ vault → ⑦ NEAR chain**.
 
-Deux modes, détectés automatiquement au chargement :
+- **at the top, one white label** says in one sentence what Dry Run does, then narrates each
+  step as it happens; just below it, a line says **before anything is played** whether you are
+  watching the scripted demo or talking to the real firewall (live mode, with the vault and
+  its balance);
+- **the requests are buttons under the label**: ▶ play the process, pay invoice · 1 Ⓝ,
+  swap good-dex, injection 49 Ⓝ, drainer trap, two-face trap, freeze the vault;
+- **a live terminal on the right** logs every step, every effect, every verdict and, in live
+  mode, the real network calls and the transaction hash.
 
-- **LIVE** (serveur actif) : les scénarios du menu sont réellement proposés au
-  pare-feu, la scène joue les phases avec la vraie réponse (verdict, règles,
-  effets, certificat Ed25519, exécution, hash réel dans le terminal) ;
-- **DÉMO** (page ouverte sans serveur) : le film scripté de `make demo` ; le
-  menu permet aussi d'y jouer chaque scénario séparément.
+Two modes, detected automatically on load:
 
-Do X → see Y :
+- **LIVE** (server running): each button sends a real request to the firewall, and the scene
+  plays the steps with its real answer (verdict, rules, effects, execution, hash);
+- **DEMO** (page opened without a server, e.g. GitHub Pages): the scripted film of the
+  real `make demo` results.
 
-1. Menu **scénario → « swap good-dex »** → **WARN (R5, premier contact)** → le
-   propriétaire confirme (`confirm:true`) → **re-simulation** → **ALLOW** → le
-   sceau Ed25519 se ferme **7/7** → la transaction part sur la chaîne →
-   **« sand = réel »**, avec le hash réel dans le terminal ;
-2. Menu **scénario → « injection 49 Ⓝ »** → **BLOCK (R1)** : le verre se
-   fissure, la chaîne reste intacte, rien n'est signé ;
-3. Menu **scénario → « piège drainer »** (déjà approuvé) → **BLOCK (R8)** : ce
-   sont les **effets** qui l'arrêtent, pas une liste blanche ;
-4. Menu **scénario → « piège two-face »** → honnête sous 0,1 NEAR, voleur
-   au-dessus : seule la **simulation différentielle (R12)** le démasque ;
-5. Menu **scénario → « geler le coffre »** → `POST /api/freeze` → **FROZEN**,
-   toute demande suivante est refusée (`ERR_FROZEN`) ;
-6. **▶ jouer le processus** → le film complet : injection, drainer, vol de
-   clé d'agent rejeté **on-chain** (`ERR_OVER_TX_CAP`), gel, puis le **banc de
-   200 robots** (100 honnêtes exécutés, 100 attaques arrêtées, F1 1,00).
+Do X → see Y (live mode, `dryrun-gate serve`):
 
-Commandes : **espace** = play/pause · **← / →** = ±2 s · **glisser** = orbite ·
-**molette** = zoom · **double-clic** = recentrer · `?t=42` = arrêt sur image ·
-`?mode=demo` = forcer le mode démo. Détails : [web/README.md](web/README.md).
+1. **pay invoice · 1 Ⓝ** → the copy shows −1 NEAR, no rule fires → **ALLOW** → executed;
+2. **injection 49 Ⓝ** → −49 NEAR in the copy → **BLOCK (R1)**: nothing is signed, the
+   explanation goes back to the agent over MCP;
+3. **drainer trap** → 2 NEAR go out, nothing comes back → **BLOCK (R8)**: the **effects** stop
+   it, not an allow-list;
+4. **two-face trap** → **BLOCK**: with the full simulator (`make demo`, `make attack`) the
+   **differential simulation (R12)** unmasks it; with the light simulator (`--sim stub`, the
+   fallback when `near-sandbox` is unavailable), it is stopped by **R8** (less received than promised);
+5. **swap good-dex** → with the full simulator: **WARN (R5, first contact)** → the owner
+   confirms (`confirm:true`) → re-simulation → **ALLOW** → the Ed25519 seal closes **7/7** →
+   the transaction runs → **"sand = real"**. The light simulator returns no token delta, so
+   this honest swap ends **BLOCK (R8)** there — the scripted film shows the full-simulator run;
+6. **freeze the vault** → `POST /api/freeze` → **FROZEN**, every later request is refused
+   (`ERR_FROZEN`);
+7. **▶ play the process** → the full scripted film: honest swap, injection, drainer, agent key
+   theft rejected **on-chain** (`ERR_OVER_TX_CAP`), freeze, then the **200-robot bench**
+   (100 honest executed, 100 attacks stopped, F1 1.00).
 
-### 8.2 Une seule interface
+URL options: `?lang=en` English page · `?mode=demo` force the scripted demo · `?t=42` freeze
+frame · `?labels=1.7` bigger 3D labels · `?stack=1` each brick names the real software ·
+`?invoice_to=testnet&invoice_near=0.1` invoice recipient and amount (for the testnet vault).
+Keys: **space** = play/pause · **← / →** = ±2 s · **drag** = orbit · **wheel** = zoom ·
+**double-click** = recentre. Details: [web/README.md](web/README.md).
 
-La scène 3D est l'interface du projet : pas de second tableau de bord. Tout ce
-qui était dans l'ancien tableau de bord 2D est soit dans la scène (état du
-coffre, certificat, frise des décisions, gel d'urgence, scénarios en 1 clic via
-le menu « scénario »), soit dans la ligne de commande (`make demo`, `make attack`,
-`make sim`, `make mcp`).
+### 8.2 A single interface
+
+The 3D scene is the project's interface: there is no second dashboard. Everything is either in
+the scene (vault state, certificate, decision timeline, emergency freeze, one-click requests),
+or in the command line (`make demo`, `make attack`, `make sim`, `make mcp`).
 
 ---
 
-## 8 bis. Serveur MCP (agents IA)
+## 8 bis. MCP server (AI agents)
 
-Le pare-feu est aussi exposable en **MCP** (JSON-RPC 2.0 sur stdin/stdout) : n'importe quel
-agent (Claude Desktop, Cursor, ZeroClaw, Codex) peut demander une transaction et obtenir
-un verdict motivé, sans jamais posséder la clé de signature.
+The firewall is also exposed over **MCP** (JSON-RPC 2.0 on stdin/stdout): any agent (Claude
+Desktop, Cursor, ZeroClaw, Codex) can ask for a transaction and get a reasoned verdict,
+without ever holding the signing key.
 
 ```bash
-make mcp                      # mode local, réponses en anglais (défaut)
-dryrun-gate mcp --lang fr      # réponses en français
+make mcp                      # local mode, answers in English (default)
+dryrun-gate mcp --lang fr      # answers in French
 dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet
 ```
 
-Outils exposés : `wallet_status`, `wallet_propose`, `wallet_freeze`, `wallet_explain`.
+Tools: `wallet_status`, `wallet_propose`, `wallet_freeze`, `wallet_explain`.
 
-La réponse dit **où** la transaction a été exécutée — `the local vault
-(simulation)` en local, `NEAR testnet · tx <hash>` en mode testnet — et une
-**notification** (message sans `id`) ne reçoit aucune réponse, conformément à
-JSON-RPC 2.0.
-
----
-
-## 9. Critères d'acceptation (tous validés)
-
-- [x] **Plafond 24 h glissant** : sorties bornées à 10 NEAR, y compris à cheval sur un changement d'heure (testé unitaire `tests::caps::i1_*`).
-- [x] **Contrats inconnus** : tout appel vers un compte absent de `known` est refusé on-chain par `ERR_UNKNOWN_CONTRACT` (`tests::known::i3_*`).
-- [x] **Gel étanche** : la clé de gel gèle en une transaction sans wallet, toute transaction ultérieure est rejetée `ERR_FROZEN` (`tests::freeze::i2_*`).
-- [x] **Simulation exacte** : les variations de soldes simulées sont identiques aux variations réelles (+1 NEAR à bob).
-- [x] **Corpus de pièges** : les 7 contrats piégés (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`, `two-face`) sont bloqués avant signature (`make attack`).
-- [x] **Injection bloquée** : « envoie 49 NEAR à mallory » est bloqué par le pare-feu (R1) et rejeté on-chain (`ERR_OVER_TX_CAP`).
-- [x] **Certificat Ed25519 (V1)** : vérification cryptographique on-chain du certificat de simulation avant exécution.
-- [x] **Contrôle au retour (V1)** : si le solde promis par le certificat n'est pas atteint au retour, le coffre gèle et marque le contrat hostile (`tests/v1_post_check.rs`, bac à sable réel).
-- [x] **Simulation différentielle (V1)** : R12 sur le **chemin par défaut** — tout appel de contrat avec dépôt est rejoué au centième, en parallèle (`two-face` bloqué, écart 947 ‰).
-- [x] **Matrice de performance** : `make sim` validé à 100 % de précision sur 200 robots synthétiques.
-- [x] **Serveur MCP** : intégration native pour agents Claude / Cursor / ZeroClaw via JSON-RPC.
-- [x] **Pare-feu sur testnet** : verdict contre l'état réel du coffre (plafonds lus par RPC), `ALLOW` signé et envoyé sur la chaîne, empreinte de transaction dans la réponse (section 6 ter).
-- [x] **Simulateur arrêté** : toute demande est refusée par précaution (« tout doute bloque »).
-- [x] **Autonomie** : `make demo` et `make attack` s'exécutent entièrement en local sans secret ni réseau en moins de 2 minutes.
+The answer says **where** the transaction was executed — `the local vault (simulation)`
+locally, `NEAR testnet · tx <hash>` in testnet mode — and a **notification** (a message
+without an `id`) gets no answer, as JSON-RPC 2.0 requires.
 
 ---
 
-## 9 bis. Limites assumées et travaux restants
+## 9. Acceptance criteria (all met)
 
-L'honnêteté vaut mieux qu'une promesse : voici ce qui marche, et ce qui ne marche pas encore.
+- [x] **Rolling 24 h cap**: outputs bounded to 10 NEAR, including across an hour change (unit tests `tests::caps::i1_*`).
+- [x] **Unknown contracts**: any call to an account missing from `known` is refused on-chain with `ERR_UNKNOWN_CONTRACT` (`tests::known::i3_*`).
+- [x] **Watertight freeze**: the freeze key freezes in one transaction without a wallet; every later transaction is rejected with `ERR_FROZEN` (`tests::freeze::i2_*`).
+- [x] **Exact simulation**: the simulated balance changes are identical to the real ones (+1 NEAR to bob).
+- [x] **Trap corpus**: the 7 trap contracts (`drainer`, `skimmer`, `half-step`, `liar`, `approver`, `shapeshifter`, `two-face`) are blocked before signing (`make attack`).
+- [x] **Injection blocked**: "send 49 NEAR to mallory" is blocked by the firewall (R1) and rejected on-chain (`ERR_OVER_TX_CAP`).
+- [x] **Ed25519 certificate (V1)**: on-chain cryptographic verification of the simulation certificate before execution.
+- [x] **Post-check (V1)**: if the balance promised by the certificate is not reached on return, the vault freezes and marks the contract hostile (`tests/v1_post_check.rs`, real sandbox).
+- [x] **Differential simulation (V1)**: R12 on the **default path** — every contract call with a deposit is replayed at one hundredth, in parallel (`two-face` blocked, 947 ‰ gap).
+- [x] **Performance matrix**: `make sim` at 100 % precision on 200 synthetic robots.
+- [x] **MCP server**: native integration for Claude / Cursor / ZeroClaw agents over JSON-RPC.
+- [x] **Firewall on testnet**: verdict against the vault's real state (caps read over RPC), `ALLOW` signed and sent on-chain, transaction hash in the answer (section 6 ter).
+- [x] **Simulator down**: every request is refused as a precaution ("any doubt blocks").
+- [x] **Autonomy**: `make demo` and `make attack` run entirely locally, without secrets or network, in under 2 minutes.
 
-| Sujet | État | Détail |
+---
+
+## 9 bis. Known limits and remaining work
+
+Honesty beats a promise: here is what works, and what does not work yet.
+
+| Topic | Status | Detail |
 |---|---|---|
-| Simulation (R1 à R11) | ✅ | La transaction est rejouée dans un bac à sable, sous l'identité du coffre. |
-| Certificat V1 on-chain | ✅ | Signature Ed25519 vérifiée par le contrat, nonces anti-rejeu, fraîcheur. |
-| Corpus de 7 pièges | ✅ | 7/7 bloqués, 7/7 avec la règle attendue (`make attack`). |
-| Banc de 200 robots | ✅ | `make sim` : 100 % de précision sur le corpus synthétique. |
-| Serveur MCP | ✅ | JSON-RPC 2.0, 4 outils. |
-| **Contrôle au retour** (`on_post_check`) | ✅ | Activé : `appel → on_done → lecture du solde → on_post_check` dans le budget de gas d'un agent. Écart constaté → gel + marquage hostile (`tests/v1_post_check.rs`). |
-| **Simulation différentielle** (R12) | ✅ | Branchée sur le **chemin par défaut** : tout appel de contrat avec dépôt est rejoué au centième (`Gatekeeper::propose`). Les deux rejeux tournent en parallèle, la latence ne double pas. |
-| Portée de R12 | ⚠️ | R12 est **orienté** : il ne mord que si le petit montant est proportionnellement mieux traité que le montant réel (signature du double visage). Un contrat à **dépôt minimum fixe** (comme `good-dex` ici, 2 NEAR) ne peut pas être rejoué au centième : R12 n'apporte alors aucun signal et les autres règles tranchent. Un contrat à prix fixe légitime peut être signalé — assumé, le seuil est à 100 ‰ (le SPEC annonce 5 %, mais une courbe de liaison honnête dérive déjà de plusieurs pour cent entre 2 NEAR et 0,02 NEAR). |
-| **Témoin « wallet nu »** | ⚠️ | Le témoin est joué **après** le corpus, sur le coffre protégé : il montre `ERR_NO_CERT` (la défense V1), pas la perte de fonds brute. La perte brute est documentée dans le tableau de la section 5 et montrée par la simulation. |
-| Coffre sur testnet public | ✅ | Déployé sur `dryrun-vault-1112.testnet` : plafond vérifié sur la chaîne (5 NEAR refusé, 0,1 NEAR exécuté). Voir la section 6 bis. |
-| Pare-feu branché sur testnet | ✅ | `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet` : `status()` lu par RPC, demandes `ALLOW` signées et envoyées sur la chaîne (tx [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa)). Voir section 6 ter. |
-| Enclave TEE (MAX) | ❌ | Non commencé. La clé du simulateur vit dans le processus du garde-barrière. |
+| Simulation (R1 to R11) | ✅ | The transaction is replayed in a sandbox, under the vault's identity. |
+| V1 on-chain certificate | ✅ | Ed25519 signature verified by the contract, anti-replay nonces, freshness. |
+| Corpus of 7 traps | ✅ | 7/7 blocked, 7/7 with the expected rule (`make attack`). |
+| 200-robot bench | ✅ | `make sim`: 100 % precision on the synthetic corpus. |
+| MCP server | ✅ | JSON-RPC 2.0, 4 tools. |
+| **Post-check** (`on_post_check`) | ✅ | Enabled: `call → on_done → balance read → on_post_check` within an agent's gas budget. A gap found → freeze + hostile marking (`tests/v1_post_check.rs`). |
+| **Differential simulation** (R12) | ✅ | On the **default path**: every contract call with a deposit is replayed at one hundredth (`Gatekeeper::propose`). Both replays run in parallel, latency does not double. |
+| Scope of R12 | ⚠️ | R12 is **directional**: it only fires when the small amount is proportionally better treated than the real amount (the two-face signature). A contract with a **fixed minimum deposit** (like `good-dex` here, 2 NEAR) cannot be replayed at one hundredth: R12 then gives no signal and the other rules decide. A legitimate fixed-price contract can be flagged — assumed, the threshold is 100 ‰ (the SPEC says 5 %, but an honest bonding curve already drifts by several percent between 2 NEAR and 0.02 NEAR). |
+| **"Bare wallet" control** | ⚠️ | The control runs **after** the corpus, on the protected vault: it shows `ERR_NO_CERT` (the V1 defence), not the raw loss of funds. The raw loss is documented in the table of section 5 and shown by the simulation. |
+| Light simulator (`--sim stub`) | ⚠️ | Used by default when `near-sandbox` is not available (e.g. on Windows): it returns no token delta, so token swaps end `BLOCK R8`, and `two-face` is stopped by R8 rather than R12. `make demo` / `make attack` with the full simulator give the results above. |
+| Vault on public testnet | ✅ | Deployed on `dryrun-vault-1112.testnet`: cap verified on-chain (5 NEAR refused, 0.1 NEAR executed). See section 6 bis. |
+| Firewall wired to testnet | ✅ | `dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet`: `status()` read over RPC, `ALLOW` requests signed and sent on-chain (tx [`BJqLxihw…`](https://explorer.testnet.near.org/transactions/BJqLxihwSfCpucK8VCHJPXKA7FmHZ2jUvoaivZUryVHa)), `BLOCK` sends nothing (sections 6 ter and 6 quater). |
+| TEE enclave (MAX) | ❌ | Not started. The simulator key lives in the gatekeeper process. |
 
 ---
 
-## 10. Déclaration d'assistance IA & Bibliothèques
+## 10. AI assistance & libraries
 
-- **Assistance IA** : Architecture, code Rust, tests et documentation développés avec l'aide d'agents IA (ZeroClaw / sub-agents hermes, maxed) sous la direction de GaiaSG94. Tout le code a été vérifié, compilé et testé sur machine locale.
-- **Assistance IA (agents de code)** : **Claude Code** (design « Laque noire », HUD web, scène 3D, documentation) et **opencode** (implémentation web, terminal live, tests d'intégration, maintenance MCP), sous la direction de GaiaSG94. Tout le code a été relu, compilé et testé sur machine locale.
-- **Bibliothèques principales** :
+- **AI assistance**: architecture, Rust code, tests and documentation developed with the help of AI agents (ZeroClaw / hermes sub-agents, maxed) under the direction of GaiaSG94. All code was checked, compiled and tested on a local machine.
+- **AI assistance (coding agents)**: **Claude Code** ("black lacquer" design, web HUD, 3D scene, documentation, demo video) and **opencode** (web implementation, live terminal, integration tests, MCP maintenance, testnet mode), under the direction of GaiaSG94. All code was reviewed, compiled and tested on a local machine.
+- **Main libraries**:
   - `near-sdk` 5.30 (smart contracts)
-  - `near-sandbox` 0.4 (bac à sable local NEAR)
-  - `near-primitives` / `near-crypto` 0.38 (manipulation et signature de transactions)
+  - `near-sandbox` 0.4 (local NEAR sandbox)
+  - `near-primitives` / `near-crypto` 0.38 (transaction building and signing)
   - `serde`, `serde_json`, `tokio`, `borsh`.
 
 ---
 
-## 10 bis. Historique et provenance du dépôt
+## 10 bis. Repository history and provenance
 
-- **Tout le code date du hackathon.** Le premier commit est du 10 novembre 2026 (13:43), après l'annonce du
-  19 octobre ; aucun code antérieur n'est repris. Historique complet :
+- **All the code dates from the hackathon.** The first commit is from 10 November 2026 (13:43),
+  after the 19 October announcement; no earlier code is reused. Full history:
   <https://github.com/GaiaSG94/dry-run/commits/main>.
-- **Les deux premiers commits sont volumineux** (10/11 : squelette, types et règles, puis contrats, simulateur,
-  garde-barrière et web, environ 17 000 lignes) : cette base a été produite avec les agents IA déclarés en
-  section 10, puis commitée en deux blocs. La suite de l'historique est incrémentale (une vingtaine de commits
-  et de demandes de fusion jusqu'au 14/11).
-- **Tag de soumission** : `hackathon-submission` marque le commit soumis.
+- **The first two commits are large** (10/11: skeleton, types and rules, then contracts,
+  simulator, gatekeeper and web, about 17,000 lines): this base was produced with the AI agents
+  declared in section 10, then committed in two blocks. The rest of the history is incremental.
+- **Submission tag**: `hackathon-submission` marks the submitted commit.
 
 ---
 
-## 11. Licence
+## 11. License
 
-Double licence **MIT** ou **Apache-2.0**, au choix.
+**MIT** — see [LICENSE](LICENSE).
