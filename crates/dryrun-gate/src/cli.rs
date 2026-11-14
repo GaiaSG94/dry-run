@@ -26,13 +26,11 @@ impl Network {
         Network::Local
     }
 
-    /// Réseau testnet public. `DRYRUN_RPC_URL` remplace le point d'accès RPC par défaut
-    /// (rpc.testnet.near.org est déprécié et limite le débit : erreurs 429).
+    /// Réseau testnet public. `DRYRUN_RPC_URL` remplace le point d'accès RPC par
+    /// défaut (réglage prioritaire, accepté seulement en `https`).
     pub fn testnet(vault: String) -> Self {
-        let rpc_url = std::env::var("DRYRUN_RPC_URL")
-            .ok()
-            .filter(|u| u.starts_with("https://"))
-            .unwrap_or_else(|| crate::testnet::rpc::TESTNET_RPC_URL.to_string());
+        let overridden = std::env::var(crate::testnet::rpc::RPC_URL_ENV).ok();
+        let rpc_url = crate::testnet::rpc::resolve_rpc_url(overridden.as_deref());
         Network::Chain {
             vault,
             name: "testnet".to_string(),
@@ -321,6 +319,72 @@ impl NetworkChoice {
                 ),
             },
             other => anyhow::bail!("réseau inconnu : {other} (attendus : local, testnet)"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testnet::rpc::{RPC_URL_ENV, TESTNET_RPC_URL};
+    use std::sync::Mutex;
+
+    /// Sérialise les tests qui touchent la variable d'environnement.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// URL RPC retenue par un réseau `testnet`.
+    fn rpc_url_of(network: &Network) -> String {
+        match network {
+            Network::Chain { rpc_url, .. } => rpc_url.clone(),
+            Network::Local => panic!("réseau attendu : testnet"),
+        }
+    }
+
+    /// `DRYRUN_RPC_URL` prime sur le point d'accès par défaut.
+    #[test]
+    fn dryrun_rpc_url_est_pris_en_compte() {
+        let _garde = ENV_LOCK.lock().unwrap();
+        let sauvegarde = std::env::var(RPC_URL_ENV).ok();
+
+        std::env::set_var(RPC_URL_ENV, "https://rpc.example.com");
+        let url = rpc_url_of(&Network::testnet("coffre.testnet".to_string()));
+        assert_eq!(url, "https://rpc.example.com");
+
+        match sauvegarde {
+            Some(valeur) => std::env::set_var(RPC_URL_ENV, valeur),
+            None => std::env::remove_var(RPC_URL_ENV),
+        }
+    }
+
+    /// Une URL `http` est refusée : le point d'accès par défaut est https.
+    #[test]
+    fn une_url_http_est_refusee() {
+        let _garde = ENV_LOCK.lock().unwrap();
+        let sauvegarde = std::env::var(RPC_URL_ENV).ok();
+
+        std::env::set_var(RPC_URL_ENV, "http://rpc.example.com");
+        let url = rpc_url_of(&Network::testnet("coffre.testnet".to_string()));
+        assert_eq!(url, TESTNET_RPC_URL);
+        assert!(url.starts_with("https://"));
+
+        match sauvegarde {
+            Some(valeur) => std::env::set_var(RPC_URL_ENV, valeur),
+            None => std::env::remove_var(RPC_URL_ENV),
+        }
+    }
+
+    /// Sans la variable, le point d'accès par défaut est utilisé.
+    #[test]
+    fn sans_variable_le_defaut_suffit() {
+        let _garde = ENV_LOCK.lock().unwrap();
+        let sauvegarde = std::env::var(RPC_URL_ENV).ok();
+        std::env::remove_var(RPC_URL_ENV);
+
+        let url = rpc_url_of(&Network::testnet("coffre.testnet".to_string()));
+        assert_eq!(url, TESTNET_RPC_URL);
+
+        if let Some(valeur) = sauvegarde {
+            std::env::set_var(RPC_URL_ENV, valeur);
         }
     }
 }

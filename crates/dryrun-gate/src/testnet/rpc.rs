@@ -11,8 +11,24 @@ use anyhow::{anyhow, bail, Context, Result};
 use base64::Engine;
 use serde_json::{json, Value};
 
-/// URL RPC du testnet public.
-pub const TESTNET_RPC_URL: &str = "https://rpc.testnet.near.org";
+/// Variable d'environnement qui remplace le point d'accès RPC par défaut.
+pub const RPC_URL_ENV: &str = "DRYRUN_RPC_URL";
+
+/// URL RPC du testnet public (point d'accès ouvert, non déprécié).
+pub const TESTNET_RPC_URL: &str = "https://rpc.testnet.fastnear.com";
+
+/// URL RPC retenue : `DRYRUN_RPC_URL` si elle est en `https`, sinon le défaut.
+///
+/// Le point d'accès par défaut est public et ouvert ; `rpc.testnet.near.org`
+/// est déprécié et limite le débit (erreurs 429). Une URL qui n'est pas en
+/// `https` est refusée : le défaut, lui, l'est toujours.
+pub fn resolve_rpc_url(overridden: Option<&str>) -> String {
+    overridden
+        .map(str::trim)
+        .filter(|url| url.starts_with("https://"))
+        .unwrap_or(TESTNET_RPC_URL)
+        .to_string()
+}
 
 /// Client JSON-RPC : une vue de contrat et un solde de compte.
 pub struct RpcClient {
@@ -123,5 +139,42 @@ impl RpcClient {
             .pointer("/sync_info/latest_block_height")
             .and_then(Value::as_u64)
             .ok_or_else(|| anyhow!("status : hauteur de bloc absente"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn le_defaut_est_un_point_dacces_ouvert_et_https() {
+        assert_eq!(resolve_rpc_url(None), TESTNET_RPC_URL);
+        assert!(TESTNET_RPC_URL.starts_with("https://"));
+        assert!(!TESTNET_RPC_URL.contains("rpc.testnet.near.org"));
+    }
+
+    #[test]
+    fn une_url_https_prime_sur_le_defaut() {
+        assert_eq!(
+            resolve_rpc_url(Some("https://rpc.example.com")),
+            "https://rpc.example.com"
+        );
+        assert_eq!(
+            resolve_rpc_url(Some("  https://rpc.example.com  ")),
+            "https://rpc.example.com"
+        );
+    }
+
+    #[test]
+    fn une_url_http_est_refusee() {
+        assert_eq!(
+            resolve_rpc_url(Some("http://rpc.example.com")),
+            TESTNET_RPC_URL
+        );
+        assert_eq!(
+            resolve_rpc_url(Some("ftp://rpc.example.com")),
+            TESTNET_RPC_URL
+        );
+        assert_eq!(resolve_rpc_url(Some("")), TESTNET_RPC_URL);
     }
 }

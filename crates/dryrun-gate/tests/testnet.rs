@@ -32,7 +32,7 @@ const PAYEE: &str = "testnet";
 
 /// Construit un garde-barrière branché sur le coffre testnet.
 async fn gate() -> anyhow::Result<Gatekeeper> {
-    let sim = Simulator::testnet(VAULT, "testnet", "https://rpc.testnet.near.org").await?;
+    let sim = Simulator::testnet(VAULT, "testnet", "https://rpc.testnet.fastnear.com").await?;
     Ok(Gatekeeper::from_sim(Arc::new(sim)))
 }
 
