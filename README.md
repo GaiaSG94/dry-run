@@ -420,20 +420,31 @@ against the `vault` actually deployed above.
 
 ```bash
 # The MCP server, wired to the chain (the agent really signs)
+# Runs as-is: no environment variable needed
 dryrun-gate mcp --network testnet --vault dryrun-vault-1112.testnet --lang en
 
 # The web page and its API, wired to the chain
+# Also runs as-is, same default endpoint
 dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
+```
 
-# rpc.testnet.near.org is deprecated and rate-limited (429 errors): pick another provider
-DRYRUN_RPC_URL=https://rpc.testnet.fastnear.com dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
+The default RPC endpoint is `https://rpc.testnet.fastnear.com` — a public endpoint that works
+out of the box. (The historical `rpc.testnet.near.org` is deprecated and rate-limited: it
+answers with 429 errors.) `DRYRUN_RPC_URL` remains available as an **optional** override, for
+any other provider — accepted only if it starts with `https://`; an `http://` URL is refused
+and the default endpoint is used:
+
+```bash
+# Optional override of the RPC endpoint (https only)
+DRYRUN_RPC_URL=https://archival-rpc.testnet.fastnear.com \
+  dryrun-gate serve --network testnet --vault dryrun-vault-1112.testnet
 ```
 
 What the mode changes, and nothing else:
 
 | | Local mode (default) | `--network testnet` mode |
 |---|---|---|
-| Vault state | in memory or local sandbox | `status()` read **over RPC** (`https://rpc.testnet.near.org` by default, or `DRYRUN_RPC_URL`) |
+| Vault state | in memory or local sandbox | `status()` read **over RPC** (`https://rpc.testnet.fastnear.com` by default, or `DRYRUN_RPC_URL` if it is an `https` URL) |
 | Verdict | same rules R1 to R12 | same rules R1 to R12, **judged against the chain's real caps** |
 | `ALLOW` verdict | signed and executed locally | `execute(action, cert: null)` sent **on-chain**, signed by the account key |
 | `BLOCK` / `WARN` verdict | nothing is signed | nothing is sent |
